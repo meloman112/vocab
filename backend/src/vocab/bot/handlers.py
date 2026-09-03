@@ -47,7 +47,9 @@ async def review(message: Message, cfg: Settings) -> None:
 
 @router.message(Command("stats"))
 async def stats(message: Message, api: VocabAPI) -> None:
-    data = await api.stats(message.chat.id)
+    # from_user, а не chat: в группе chat.id — идентификатор группы,
+    # и словарь завёлся бы на неё, а не на владельца.
+    data = await api.stats(message.from_user.id)
     forecast = " ".join(f"{d['count']}" for d in data["forecast"])
     await message.answer(
         f"Всего: {data['total']}\n"
@@ -61,7 +63,7 @@ async def stats(message: Message, api: VocabAPI) -> None:
 
 @router.message(Command("failed"))
 async def failed(message: Message, api: VocabAPI) -> None:
-    cards = await api.failed(message.chat.id)
+    cards = await api.failed(message.from_user.id)
     if not cards:
         await message.answer("Все карточки обогатились.")
         return
@@ -94,5 +96,5 @@ async def add_word(message: Message, api: VocabAPI) -> None:
         await message.answer("Это больше похоже на текст, чем на слово.")
         return
 
-    result = await api.add_word(message.chat.id, word)
+    result = await api.add_word(message.from_user.id, word)
     await message.answer("✅ added" if result["created"] else "уже есть")
