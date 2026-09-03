@@ -1,0 +1,6 @@
+**/node_modules
+**/__pycache__
+**/.venv
+backend/src/vocab/api/static
+.git
+.env

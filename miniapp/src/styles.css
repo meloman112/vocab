@@ -1,0 +1,101 @@
+/*
+ * Цвета берутся только из переменных Telegram: тема подхватывается сама,
+ * включая ту, которую пользователь поставил в клиенте вручную.
+ * telegram-ui объявляет их сам, здесь только раскладка.
+ */
+
+body {
+  margin: 0;
+  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  color: var(--tg-theme-text-color, #000);
+}
+
+.screen {
+  /* dvh, а не vh: в Telegram высота вьюпорта меняется при разворачивании,
+     и на vh нижние кнопки уезжают под край экрана. */
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 16px;
+  gap: 16px;
+}
+
+.screen--center {
+  align-items: center;
+  justify-content: center;
+}
+
+.screen__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.screen__head > :first-child {
+  flex: 1;
+}
+
+.screen__counter {
+  color: var(--tg-theme-hint-color, #999);
+  font-variant-numeric: tabular-nums;
+}
+
+.screen__body {
+  flex: 1;
+  display: flex;
+}
+
+.screen__foot {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border-radius: 16px;
+  text-align: center;
+  background: var(--tg-theme-bg-color, #fff);
+}
+
+.card__word {
+  word-break: break-word;
+}
+
+.card__ipa,
+.card__hint,
+.card__pos {
+  color: var(--tg-theme-hint-color, #999);
+}
+
+.card__hint {
+  margin-top: 24px;
+}
+
+.card__back {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tg-theme-secondary-bg-color, #eee);
+}
+
+.card__example {
+  color: var(--tg-theme-text-color, #000);
+}
+
+.card__example-ru {
+  color: var(--tg-theme-hint-color, #999);
+}
+
+.ratings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
