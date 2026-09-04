@@ -137,9 +137,18 @@ fastmcp сверяет заголовок `Host` со значением `DOMAIN
 python3 scripts/bookmarklet.py
 ```
 
-Вывод — в закладку. Расширение (`extension/`) ставится через
-`chrome://extensions` → «Загрузить распакованное», адрес и токен вводятся
-на странице настроек расширения.
+Вывод — в закладку.
+
+Расширение (`extension/`) собрано под оба движка: в манифесте объявлены
+и `service_worker` (Chrome), и `background.scripts` (Firefox), а `browser.*`
+и `chrome.*` разводятся одной строкой. Адрес и токен вводятся на странице
+настроек, в код они не попадают.
+
+- Chrome: `chrome://extensions` → Developer mode → «Загрузить распакованное»
+- Firefox и форки (Zen): `about:debugging#/runtime/this-firefox` →
+  «Load Temporary Add-on» → выбрать `manifest.json`. Временная установка
+  живёт до перезапуска браузера; постоянная требует подписи на
+  addons.mozilla.org.
 
 ## Разработка
 

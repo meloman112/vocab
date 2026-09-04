@@ -1,19 +1,25 @@
-// Хост и токен лежат в chrome.storage, а не в коде: иначе токен уехал бы
+// Chrome зовёт фон service worker-ом, Firefox — обычным скриптом; в манифесте
+// объявлены оба ключа, и каждый браузер читает свой.
+// В Firefox промисы возвращает browser.*, в Chrome — chrome.*; одна строка
+// вместо двух сборок расширения.
+const api = globalThis.browser ?? globalThis.chrome;
+
+// Хост и токен лежат в storage, а не в коде: иначе токен уехал бы
 // в git вместе с расширением.
 const MENU_ID = 'vocab-add';
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
+api.runtime.onInstalled.addListener(() => {
+  api.contextMenus.create({
     id: MENU_ID,
     title: 'vocab: добавить «%s»',
     contexts: ['selection'],
   });
 });
 
-chrome.contextMenus.onClicked.addListener(async (info) => {
+api.contextMenus.onClicked.addListener(async (info) => {
   if (info.menuItemId !== MENU_ID || !info.selectionText) return;
 
-  const { host, token } = await chrome.storage.sync.get(['host', 'token']);
+  const { host, token } = await api.storage.sync.get(['host', 'token']);
   if (!host || !token) {
     notify('vocab', 'Не заполнены настройки расширения');
     return;
@@ -36,7 +42,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 });
 
 function notify(title, message) {
-  chrome.notifications.create({
+  api.notifications.create({
     type: 'basic',
     iconUrl: 'icon.png',
     title,
