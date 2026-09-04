@@ -8,12 +8,18 @@ const api = globalThis.browser ?? globalThis.chrome;
 // в git вместе с расширением.
 const MENU_ID = 'vocab-add';
 
-api.runtime.onInstalled.addListener(() => {
+api.runtime.onInstalled.addListener(async () => {
   api.contextMenus.create({
     id: MENU_ID,
     title: 'vocab: добавить «%s»',
     contexts: ['selection'],
   });
+
+  // Без адреса и токена расширение бесполезно, а страницу настроек
+  // в about:addons ещё надо найти. Открываем её сами — но только пока
+  // настройки пусты, иначе она лезла бы при каждом обновлении.
+  const { host, token } = await api.storage.sync.get(['host', 'token']);
+  if (!host || !token) api.runtime.openOptionsPage();
 });
 
 api.contextMenus.onClicked.addListener(async (info) => {

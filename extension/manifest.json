@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "vocab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Добавить выделенное слово в личный словарь",
   "permissions": ["contextMenus", "storage", "notifications"],
   "host_permissions": ["https://*/*"],
@@ -10,8 +10,7 @@
     "scripts": ["bg.js"]
   },
   "options_ui": {
-    "page": "options.html",
-    "open_in_tab": true
+    "page": "options.html"
   },
   "icons": { "16": "icon.png" },
   "browser_specific_settings": {
