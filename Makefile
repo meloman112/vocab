@@ -22,6 +22,10 @@ psql: ## Консоль базы
 front: ## Пересобрать мини-апп локально (в контейнере это делает Dockerfile)
 	cd miniapp && npm ci && npm run build
 
+xpi: ## Собрать расширение в extension/vocab.xpi
+	@cd extension && rm -f ../vocab.xpi && zip -q -r -FS ../vocab.xpi . && \
+	 echo "собрано: $(CURDIR)/vocab.xpi"
+
 test: ## Тесты backend
 	cd backend && python -m pytest
 
@@ -31,4 +35,4 @@ env-check: ## Все ключи из .env.example есть в .env
 smoke: ## Проверить живой контур
 	@python3 scripts/smoke.py
 
-.PHONY: help up down logs ps psql front test env-check smoke
+.PHONY: help up down logs ps psql front xpi test env-check smoke

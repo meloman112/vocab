@@ -1,16 +1,41 @@
 <!doctype html>
-<meta charset="utf-8" />
-<title>vocab</title>
-<style>
-  body { font: 14px system-ui; padding: 16px; max-width: 420px; }
-  label { display: block; margin: 12px 0 4px; }
-  input { width: 100%; box-sizing: border-box; padding: 6px; }
-  button { margin-top: 16px; padding: 6px 16px; }
-</style>
-<label for="host">Адрес API</label>
-<input id="host" placeholder="https://vocab.example.com" />
-<label for="token">API_TOKEN</label>
-<input id="token" type="password" />
-<button id="save">Сохранить</button>
-<p id="status"></p>
-<script src="options.js"></script>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>vocab</title>
+    <style>
+      /* Zen тёмный по умолчанию. Без color-scheme страница расширения
+         получает белый фон системной темы и чёрный текст поверх тёмного
+         окна — читать нечем. */
+      :root { color-scheme: light dark; }
+      body {
+        font: 14px system-ui, sans-serif;
+        padding: 16px;
+        max-width: 420px;
+        background: Canvas;
+        color: CanvasText;
+      }
+      label { display: block; margin: 12px 0 4px; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px;
+        background: Field;
+        color: FieldText;
+        border: 1px solid GrayText;
+        border-radius: 4px;
+      }
+      button { margin-top: 16px; padding: 6px 16px; }
+      #status { color: GrayText; }
+    </style>
+  </head>
+  <body>
+    <label for="host">Адрес API</label>
+    <input id="host" placeholder="https://vocab.proxy.blick.uz" />
+    <label for="token">API_TOKEN</label>
+    <input id="token" type="password" />
+    <button id="save">Сохранить</button>
+    <p id="status"></p>
+    <script src="options.js"></script>
+  </body>
+</html>

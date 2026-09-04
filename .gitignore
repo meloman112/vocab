@@ -11,3 +11,6 @@ __pycache__/
 
 # Сборка мини-аппа: артефакт, не исходник. Собирается в Dockerfile.
 backend/src/vocab/api/static/
+
+# Собранное расширение — тоже артефакт, собирается make xpi.
+vocab.xpi
