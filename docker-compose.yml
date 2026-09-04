@@ -24,9 +24,13 @@ services:
       # записан в .env дважды и не разъехался между копиями.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     ports:
-      # Только на loopback: снаружи вход один — Caddy с TLS. Локальный порт
-      # нужен для make smoke и разработки мини-аппа против живого API.
-      - "127.0.0.1:8000:8000"
+      # Слушаем адрес из BIND_ADDR — это NetBird-адрес хоста (100.x.x.x).
+      # TLS и публичный домен даёт reverse proxy самого NetBird, поэтому
+      # порт не должен торчать на публичном интерфейсе: 0.0.0.0 открыл бы
+      # API всему интернету в обход оверлея.
+      # Умолчание 127.0.0.1 намеренно бесполезно снаружи: забытый BIND_ADDR
+      # обязан сломать доступ, а не тихо открыть его всем.
+      - "${BIND_ADDR:-127.0.0.1}:8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -48,23 +52,5 @@ services:
         # поэтому стартовать раньше него ему незачем.
         condition: service_healthy
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
