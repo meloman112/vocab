@@ -17,15 +17,6 @@ router = Router()
 
 MAX_TEXT_LEN = 300
 
-# Пороги шкалы Zipf (wordfreq): 6+ — the, have; 5 — read, child;
-# 4 — reliable; 3 — redundant; ниже — редкость.
-FREQUENCY_LABELS = (
-    (6.0, "очень частое"),
-    (5.0, "частое"),
-    (4.0, "среднее"),
-    (3.0, "редкое"),
-)
-
 
 def review_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -35,13 +26,6 @@ def review_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
             )
         ]]
     )
-
-
-def frequency_label(zipf: float) -> str:
-    for threshold, label in FREQUENCY_LABELS:
-        if zipf >= threshold:
-            return label
-    return "очень редкое"
 
 
 def format_entry(entry: dict[str, Any]) -> str:
@@ -57,7 +41,7 @@ def format_entry(entry: dict[str, Any]) -> str:
     lines.append(entry["translation"])
     lines += [f"• {e['en']} — {e['ru']}" for e in entry["examples"]]
     lines.append("")
-    lines.append(f"⭐ {frequency_label(entry['zipf'])} · учат: {entry['learners']}")
+    lines.append(f"⭐ {entry['top']} · учат: {entry['learners']}")
     lines.append("✅ добавлено в твои слова" if entry["created"] else "уже было в твоих словах")
     return "\n".join(lines)
 
@@ -68,7 +52,8 @@ async def start(message: Message, cfg: Settings) -> None:
         "Пришли английское слово в любой форме — went, children, reading — "
         "отвечу переводом, формой и примерами и добавлю в повторение.\n"
         "Пришлёшь фразу или предложение — достану из него устойчивые выражения.\n\n"
-        "/review — повторение\n/stats — цифры",
+        "/review — повторение\n/stats — цифры и серия\n/top — что учат чаще всего\n"
+        "/rating — рейтинг недели",
         reply_markup=review_keyboard(cfg),
     )
 
@@ -89,7 +74,46 @@ async def stats(message: Message, api: VocabAPI) -> None:
         f"Выучено: {data['learned']}\n"
         f"Сейчас на повторение: {data['due_now']}\n"
         f"Сегодня всего: {data['due_today']}\n"
-        f"Прогноз на 7 дней: {forecast}"
+        f"Прогноз на 7 дней: {forecast}\n"
+        f"🔥 Серия: {data['streak']} дн. (рекорд {data['best_streak']})"
+    )
+
+
+@router.message(Command("top"))
+async def top(message: Message, api: VocabAPI) -> None:
+    words = await api.top(message.from_user.id)
+    if not words:
+        await message.answer("Общий словарь пока пуст.")
+        return
+    lines = [
+        f"{i}. {w['word']} — {w['translation']}  ⭐ {w['top']} · учат: {w['learners']}"
+        + (" ✅" if w["mine"] else "")
+        for i, w in enumerate(words, 1)
+    ]
+    await message.answer("Что учат чаще всего (✅ — есть у тебя):\n\n" + "\n".join(lines))
+
+
+@router.message(Command("rating"))
+async def rating(message: Message, api: VocabAPI) -> None:
+    board = await api.leaderboard(message.from_user.id)
+    if not board["top"]:
+        await message.answer("На этой неделе ещё никто не занимался. Будь первым!")
+        return
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = [
+        f"{medals.get(r['place'], str(r['place']) + '.')} {r['name']} — {r['xp']} XP"
+        + (f" 🔥{r['streak']}" if r["streak"] else "")
+        for r in board["top"]
+    ]
+    me = board["me"]
+    footer = (
+        f"Ты: {me['place']} место, {me['xp']} XP"
+        if me
+        else "Тебя пока нет в рейтинге — одно повторение, и ты в списке."
+    )
+    await message.answer(
+        "🏆 Рейтинг недели (10 XP за повторение, обнуляется в понедельник)\n\n"
+        + "\n".join(lines) + "\n\n" + footer
     )
 
 

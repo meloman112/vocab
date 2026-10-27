@@ -27,8 +27,8 @@ def make_init_data(tg_id: int = 42, auth_date: int | None = None) -> str:
     return urlencode(fields)
 
 
-def test_valid_init_data_returns_tg_id():
-    assert parse_init_data(make_init_data(777), BOT_TOKEN) == 777
+def test_valid_init_data_returns_tg_id_and_name():
+    assert parse_init_data(make_init_data(777), BOT_TOKEN) == (777, "T")
 
 
 def test_tampered_payload_is_rejected():

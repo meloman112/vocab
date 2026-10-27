@@ -20,6 +20,8 @@ export default defineConfig({
       '/review': 'http://localhost:8000',
       '/stats': 'http://localhost:8000',
       '/words': 'http://localhost:8000',
+      '/discover': 'http://localhost:8000',
+      '/leaderboard': 'http://localhost:8000',
     },
   },
 });

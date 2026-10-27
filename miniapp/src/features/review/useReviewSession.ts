@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { api } from '../../api/client';
 import type { Rating } from '../../api/types';
@@ -7,6 +7,9 @@ import { initialState, reducer } from './session';
 
 export function useReviewSession() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Оценки уходят фоном; итог сессии ждёт их, иначе серия и XP на экране
+  // «Готово» отставали бы на последнюю карточку.
+  const pending = useRef<Promise<unknown>[]>([]);
 
   const fetchCards = useCallback(
     async (source: typeof api.queue, whenEmpty: 'empty' | 'exhausted') => {
@@ -44,13 +47,16 @@ export function useReviewSession() {
       // Ответ уходит фоном, по одному. Восстанавливать порядок или
       // повторять запрос не пытаемся: потерянная оценка стоит одного
       // лишнего повторения, а очередь ретраев — целого слоя кода.
-      api.review(card.id, rating).catch(() => {
+      const sent = api.review(card.id, rating).catch(() => {
         notify('error');
         dispatch({ type: 'syncError' });
       });
+      pending.current.push(sent);
     },
     [state.cards, state.index],
   );
 
-  return { state, flip, rate, reload: load, learnNew } as const;
+  const settled = useCallback(() => Promise.all(pending.current), []);
+
+  return { state, flip, rate, reload: load, learnNew, settled } as const;
 }

@@ -17,6 +17,7 @@ FULL = {
         {"en": "I go to work by bus.", "ru": "Я езжу на работу на автобусе."},
         {"en": "She has gone home.", "ru": "Она ушла домой."},
     ],
+    "zipf": 6.4,
 }
 
 
@@ -31,9 +32,16 @@ def test_extra_fields_are_dropped():
 
 
 def test_optional_fields_default():
-    answer = {k: v for k, v in FULL.items() if k not in ("forms", "irregular")}
+    answer = {k: v for k, v in FULL.items() if k not in ("forms", "irregular", "zipf")}
     parsed = parse_word(json.dumps(answer))
-    assert parsed["forms"] == "" and parsed["irregular"] is False
+    assert parsed["forms"] == "" and parsed["irregular"] is False and parsed["zipf"] == 0
+
+
+def test_zipf_is_clamped_to_scale():
+    # Кривая оценка не должна ни уронить перевод, ни вытолкнуть фразу
+    # в начало выдачи числом вроде 100.
+    assert parse_word(json.dumps({**FULL, "zipf": 100}))["zipf"] == 8.0
+    assert parse_word(json.dumps({**FULL, "zipf": "часто"}))["zipf"] == 0.0
 
 
 def test_irregular_must_be_real_bool():

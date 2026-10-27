@@ -10,8 +10,10 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastmcp.utilities.lifespan import combine_lifespans
 
+from .. import lexicon
 from ..config import settings
 from ..db import create_pool, migrate
+from ..dictionary import backfill_zipf
 from ..mcp.server import build_mcp_app
 from .routes import router
 
@@ -41,6 +43,9 @@ def create_app() -> FastAPI:
         # Миграции накатываются здесь, а не отдельным сервисом compose:
         # процесс один, гонки за блокировку нет.
         await migrate(app.state.pool)
+        await backfill_zipf(app.state.pool)
+        # Шкала «топ-N» строится ~2 секунды — здесь, а не на первом запросе.
+        lexicon.rank(0)
         try:
             yield
         finally:

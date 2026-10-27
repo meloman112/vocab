@@ -1,4 +1,5 @@
 import { Caption, LargeTitle, Text, Tappable } from '@telegram-apps/telegram-ui';
+import { Fragment } from 'react';
 
 import type { Card } from '../../api/types';
 
@@ -34,12 +35,17 @@ export function CardFace({ card, flipped, onFlip }: Props) {
             {card.irregular && ' · неправильное'}
           </Caption>
           {card.forms && <Caption className="card__pos">{card.forms}</Caption>}
+          {/* Fragment, а не div: перевод должен встать строкой ниже примера,
+              а это делает flex-колонка .card__back только для прямых детей. */}
           {card.examples.map((example) => (
-            <div key={example.en}>
+            <Fragment key={example.en}>
               <Text className="card__example">{example.en}</Text>
               <Caption className="card__example-ru">{example.ru}</Caption>
-            </div>
+            </Fragment>
           ))}
+          <Caption className="card__pos">
+            ⭐ {card.top} · учат: {card.learners}
+          </Caption>
         </div>
       )}
     </Tappable>

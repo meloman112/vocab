@@ -25,9 +25,13 @@ async def add_text(
         async with pool.acquire() as conn:
             created = await repo.add_card(conn, user_id, word["id"])
             count = await repo.learners(conn, word["id"])
-        entries.append(
-            {**dict(word), "form_note": form_note, "created": created, "learners": count}
-        )
+        entries.append({
+            **dict(word),
+            "form_note": form_note,
+            "created": created,
+            "learners": count,
+            "top": lexicon.rank_label(word["zipf"]),
+        })
     return entries
 
 
@@ -61,8 +65,20 @@ async def _ensure_word(
 
     await _spend_llm(pool, cfg, user_id)
     fields = await enrich.fetch_word(cfg, lemma)
+    # Частоты фраз wordfreq не знает и выдумывает их из отдельных слов
+    # («up give» = «give up»), поэтому для фразы верим оценке модели.
+    zipf = fields["zipf"] if " " in lemma else lexicon.lemma_zipf(lemma)
     async with pool.acquire() as conn:
-        return await repo.save_word(conn, lemma, lexicon.zipf(lemma), fields)
+        return await repo.save_word(conn, lemma, zipf, fields)
+
+
+async def backfill_zipf(pool: asyncpg.Pool) -> None:
+    """Частота для слов, перенесённых из личных карточек миграцией 002:
+    в SQL её не посчитать, а с нулём они навсегда ушли бы в конец выдачи.
+    После первого запуска список пуст, и это один быстрый select."""
+    async with pool.acquire() as conn:
+        for lemma in await repo.words_without_zipf(conn):
+            await repo.set_zipf(conn, lemma, lexicon.lemma_zipf(lemma))
 
 
 async def _spend_llm(pool: asyncpg.Pool, cfg: Settings, user_id: int) -> None:

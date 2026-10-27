@@ -1,8 +1,9 @@
 """Форма → лемма. От этого зависит, что went и gone — одна карточка go."""
 
 import pytest
+from wordfreq import zipf_frequency
 
-from vocab.lexicon import analyze, is_word
+from vocab.lexicon import analyze, is_word, lemma_zipf, rank, rank_label
 
 
 @pytest.mark.parametrize(
@@ -35,3 +36,19 @@ def test_gibberish_is_not_a_word():
     assert not is_word("asdfg")
     assert not is_word("слово")
     assert is_word("resilient")
+
+
+def test_lemma_frequency_counts_all_forms():
+    # went и gone частые сами по себе: без суммы go выглядел бы реже, чем есть.
+    assert lemma_zipf("go") > zipf_frequency("go", "en")
+
+
+def test_rank_orders_by_frequency():
+    assert rank(lemma_zipf("the")) == 1
+    assert rank(lemma_zipf("go")) < rank(lemma_zipf("reliable")) < rank(lemma_zipf("redundant"))
+
+
+def test_rank_labels():
+    assert rank_label(lemma_zipf("go")) == "топ-100"
+    assert rank_label(lemma_zipf("reliable")) == "топ-5000"
+    assert rank_label(0) == "реже топ-20000"

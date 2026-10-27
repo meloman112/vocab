@@ -99,3 +99,18 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+
+/* Кнопки под текстом Placeholder: главная и второстепенная столбиком. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Место в рейтинге: медаль или число одной ширины, чтобы имена шли ровно. */
+.place {
+  display: inline-block;
+  min-width: 28px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

@@ -23,6 +23,9 @@ forms — для глагола три формы через « · » (go · wen
 irregular — true, если глагол неправильный или множественное число неправильное.
 examples — массив из двух объектов {"en": ..., "ru": ...}: простые предложения
   уровня A2-B1 не длиннее 12 слов и их перевод.
+zipf — насколько часто это встречается в английском, по шкале Zipf с одним
+  знаком после запятой: 7 — как "the", 6 — как "go", 5 — как "read",
+  4 — как "reliable", 3 — как "redundant", 2 — совсем редко.
 
 Никаких пояснений и markdown вне JSON.
 """
@@ -72,7 +75,17 @@ def parse_word(content: str) -> dict[str, Any]:
         "forms": str(data.get("forms") or "").strip(),
         "irregular": data.get("irregular") is True,
         "examples": examples,
+        "zipf": _zipf(data.get("zipf")),
     }
+
+
+def _zipf(value: Any) -> float:
+    # Оценка нужна только фразам и только для порядка выдачи: кривое
+    # число не повод терять перевод, но и выйти за шкалу оно не должно.
+    try:
+        return min(max(float(value), 0.0), 8.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def parse_phrases(content: str) -> list[str]:

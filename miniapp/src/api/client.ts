@@ -1,5 +1,5 @@
 import { initData } from '../lib/telegram';
-import type { Card, Rating, ReviewResult } from './types';
+import type { Card, Leaderboard, Rating, ReviewResult, Stats } from './types';
 
 /**
  * API и статика отдаются одним приложением, поэтому базового URL нет:
@@ -29,6 +29,10 @@ export const api = {
 
   /** Новые слова из общего словаря — сервер сразу заводит на них карточки. */
   discover: () => request<{ cards: Card[] }>('/discover', { method: 'POST' }),
+
+  stats: () => request<Stats>('/stats'),
+
+  leaderboard: () => request<Leaderboard>('/leaderboard'),
 
   review: (cardId: number, rating: Rating) =>
     request<ReviewResult>('/review', {

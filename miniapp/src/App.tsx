@@ -1,16 +1,27 @@
 import { AppRoot, Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
+import { useState } from 'react';
 
+import { LeaderboardScreen } from './features/leaderboard/LeaderboardScreen';
 import { useReviewSession } from './features/review/useReviewSession';
 import { ReviewScreen } from './features/review/ReviewScreen';
 import { SessionSummary } from './features/review/SessionSummary';
 import { appearance, platform } from './lib/telegram';
 
 export function App() {
-  const { state, flip, rate, reload, learnNew } = useReviewSession();
+  const { state, flip, rate, reload, learnNew, settled } = useReviewSession();
+  // Рейтинг открывается поверх сессии, а не вместо неё: «Назад» возвращает
+  // на тот же экран, а не перезагружает очередь.
+  const [showBoard, setShowBoard] = useState(false);
+
+  const boardButton = (
+    <Button size="l" mode="plain" onClick={() => setShowBoard(true)}>
+      🏆 Рейтинг недели
+    </Button>
+  );
 
   return (
     <AppRoot appearance={appearance} platform={platform}>
-      {render()}
+      {showBoard ? <LeaderboardScreen onBack={() => setShowBoard(false)} /> : render()}
     </AppRoot>
   );
 
@@ -25,11 +36,16 @@ export function App() {
 
       case 'error':
         return (
-          <Placeholder header="Не открылось" description={state.error} className="screen">
-            <Button size="l" onClick={reload}>
-              Повторить
-            </Button>
-          </Placeholder>
+          <Placeholder
+            header="Не открылось"
+            description={state.error}
+            className="screen"
+            action={
+              <Button size="l" onClick={reload}>
+                Повторить
+              </Button>
+            }
+          />
         );
 
       case 'empty':
@@ -38,11 +54,15 @@ export function App() {
             header="Свои слова на сегодня всё"
             description="Взять новые из общего словаря? Сначала те, что учат чаще всего."
             className="screen"
-          >
-            <Button size="l" mode="filled" onClick={learnNew}>
-              Давай
-            </Button>
-          </Placeholder>
+            action={
+              <div className="actions">
+                <Button size="l" mode="filled" onClick={learnNew}>
+                  Давай
+                </Button>
+                {boardButton}
+              </div>
+            }
+          />
         );
 
       case 'exhausted':
@@ -51,6 +71,7 @@ export function App() {
             header="Новых слов нет"
             description="Ты разобрал весь общий словарь. Пришли боту своё слово."
             className="screen"
+            action={boardButton}
           />
         );
 
@@ -77,7 +98,9 @@ export function App() {
             done={state.cards.length}
             lapses={state.lapses}
             syncErrors={state.syncErrors}
+            settled={settled}
             onRestart={reload}
+            onLeaderboard={() => setShowBoard(true)}
           />
         );
     }

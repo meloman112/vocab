@@ -20,8 +20,8 @@ log = logging.getLogger(__name__)
 INIT_DATA_MAX_AGE = 24 * 60 * 60
 
 
-def parse_init_data(init_data: str, bot_token: str) -> int:
-    """Проверяет HMAC-SHA256 подпись initData и возвращает tg_id.
+def parse_init_data(init_data: str, bot_token: str) -> tuple[int, str]:
+    """Проверяет HMAC-SHA256 подпись initData и возвращает tg_id и имя.
 
     Алгоритм из документации Telegram: ключ — HMAC(b"WebAppData", bot_token),
     а подписывается строка вида "key=value\\n..." из всех полей кроме hash,
@@ -49,7 +49,8 @@ def parse_init_data(init_data: str, bot_token: str) -> int:
     if not user_json:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "initData без пользователя")
 
-    return int(json.loads(user_json)["id"])
+    user = json.loads(user_json)
+    return int(user["id"]), user.get("first_name") or ""
 
 
 def _tg_id_from_token(
@@ -72,15 +73,18 @@ async def current_user(
 ) -> int:
     """Возвращает users.id. Заголовка нет вовсе — 401, а не 400."""
     cfg = settings()
+    # Имя для рейтинга подписано Telegram только в initData; остальным
+    # путям оно неизвестно, и ensure_user его не трогает.
+    name = None
     if x_init_data:
-        tg_id = parse_init_data(x_init_data, cfg.bot_token)
+        tg_id, name = parse_init_data(x_init_data, cfg.bot_token)
     elif x_token:
         tg_id = _tg_id_from_token(cfg, x_token, x_tg_id)
     else:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "нужен X-Init-Data или X-Token")
 
     async with request.app.state.pool.acquire() as conn:
-        return await repo.ensure_user(conn, tg_id)
+        return await repo.ensure_user(conn, tg_id, name or None)
 
 
 async def service_only(

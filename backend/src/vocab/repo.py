@@ -9,12 +9,30 @@ import asyncpg
 # явный, чтобы select * не начал утекать в ответ API с новой колонкой.
 CARD_SELECT = """
     select c.id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
-           w.irregular, w.examples,
+           w.irregular, w.examples, w.zipf,
+           (select count(*) from cards l where l.word_id = w.id) as learners,
            c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
     from cards c join words w on w.id = c.word_id
 """
 
 WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, banned"
+
+# 10 очков за каждое повторение, как в Duolingo — за урок.
+XP_PER_REVIEW = 10
+
+# Серия после сегодняшнего повторения: сегодня уже было — та же, вчера
+# было — +1, иначе начинается заново. $2 — часовой пояс.
+NEW_STREAK = """
+    case when last_day = (now() at time zone $2)::date then streak
+         when last_day = (now() at time zone $2)::date - 1 then streak + 1
+         else 1 end
+"""
+
+# Показываемая серия: пропущенный день обнуляет её сразу, не дожидаясь
+# следующего повторения, которое обнулит её в базе.
+LIVE_STREAK = """
+    case when u.last_day >= (now() at time zone $1)::date - 1 then u.streak else 0 end
+"""
 
 # Заблокированное слово пропадает из всех личных очередей и счётчиков.
 USER_CARDS = "cards c join words w on w.id = c.word_id where c.user_id = $1 and not w.banned"
@@ -33,14 +51,16 @@ async def init_connection(conn: asyncpg.Connection) -> None:
     )
 
 
-async def ensure_user(conn: asyncpg.Connection, tg_id: int) -> int:
+async def ensure_user(conn: asyncpg.Connection, tg_id: int, name: str | None) -> int:
     # do update вместо do nothing: do nothing ничего не возвращает,
     # и на существующем пользователе пришлось бы делать второй запрос.
+    # Имя знает только мини-апп; запрос от бота (name = None) его не стирает.
     return await conn.fetchval(
-        "insert into users (tg_id) values ($1)"
-        " on conflict (tg_id) do update set tg_id = excluded.tg_id"
+        "insert into users (tg_id, name) values ($1, $2)"
+        " on conflict (tg_id) do update set name = coalesce(excluded.name, users.name)"
         " returning id",
         tg_id,
+        name,
     )
 
 
@@ -83,6 +103,36 @@ async def save_word(
         fields["irregular"],
         fields["examples"],
     )
+
+
+async def top_words(
+    conn: asyncpg.Connection, user_id: int, limit: int
+) -> list[asyncpg.Record]:
+    """Рейтинг общего словаря — тот же порядок, что у выдачи новых слов."""
+    return await conn.fetch(
+        """
+        select w.lemma as word, w.translation, w.zipf,
+               count(c.id) as learners,
+               bool_or(c.user_id = $1) is true as mine
+        from words w left join cards c on c.word_id = w.id
+        where not w.banned
+        group by w.id
+        order by learners desc, w.zipf desc, w.id
+        limit $2
+        """,
+        user_id,
+        limit,
+    )
+
+
+async def words_without_zipf(conn: asyncpg.Connection) -> list[str]:
+    # Фразы без оценки здесь не исправить — их частоту знает только модель.
+    rows = await conn.fetch("select lemma from words where zipf = 0 and lemma not like '% %'")
+    return [r["lemma"] for r in rows]
+
+
+async def set_zipf(conn: asyncpg.Connection, lemma: str, zipf: float) -> None:
+    await conn.execute("update words set zipf = $2 where lemma = $1", lemma, zipf)
 
 
 async def ban_word(conn: asyncpg.Connection, lemma: str) -> bool:
@@ -159,7 +209,12 @@ async def queue(
 
 
 async def apply_review(
-    conn: asyncpg.Connection, card_id: int, rating: int, fsrs: dict[str, Any]
+    conn: asyncpg.Connection,
+    user_id: int,
+    card_id: int,
+    rating: int,
+    fsrs: dict[str, Any],
+    tz: str,
 ) -> None:
     """Пишет оценку и новое расписание одной транзакцией.
 
@@ -181,6 +236,14 @@ async def apply_review(
         )
         await conn.execute(
             "insert into reviews (card_id, rating) values ($1, $2)", card_id, rating
+        )
+        await conn.execute(
+            f"update users set streak = {NEW_STREAK},"
+            f" best_streak = greatest(best_streak, {NEW_STREAK}),"
+            f" last_day = (now() at time zone $2)::date"
+            f" where id = $1",
+            user_id,
+            tz,
         )
 
 
@@ -237,13 +300,55 @@ async def forecast(
     )
 
 
-async def due_by_user(conn: asyncpg.Connection) -> list[asyncpg.Record]:
-    """Для напоминаний бота: у кого прямо сейчас есть что повторять."""
+async def streak(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Record:
+    return await conn.fetchrow(
+        f"select {LIVE_STREAK} as streak, u.best_streak from users u where u.id = $2",
+        tz,
+        user_id,
+    )
+
+
+async def leaderboard(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
+    """XP за текущую неделю с понедельника — у всех, кто на ней занимался.
+
+    Неделя, а не всё время: иначе первые пользователи навсегда заняли бы
+    верх, и новичку не за что было бы бороться.
+    """
     return await conn.fetch(
-        "select u.tg_id, count(*) as due"
-        " from users u join cards c on c.user_id = u.id join words w on w.id = c.word_id"
-        " where not w.banned and c.due <= now()"
-        " group by u.tg_id"
+        f"""
+        select u.id as user_id, coalesce(u.name, 'Без имени') as name,
+               count(*) * {XP_PER_REVIEW} as xp,
+               {LIVE_STREAK} as streak,
+               rank() over (order by count(*) desc) as place
+        from reviews r
+        join cards c on c.id = r.card_id
+        join users u on u.id = c.user_id
+        where r.reviewed_at >= date_trunc('week', now() at time zone $1) at time zone $1
+        group by u.id
+        order by place, u.id
+        """,
+        tz,
+    )
+
+
+async def reminder_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
+    """Кому может понадобиться напоминание: у кого есть слова и кто сегодня
+    ещё не занимался. Что именно сказать (или промолчать), решает бот.
+
+    gap — сколько дней назад было последнее повторение; null — не было ни разу.
+    """
+    return await conn.fetch(
+        """
+        select u.tg_id, u.streak,
+               (now() at time zone $1)::date - u.last_day as gap,
+               count(c.id) filter (where c.due <= now() and not w.banned) as due
+        from users u
+        join cards c on c.user_id = u.id
+        join words w on w.id = c.word_id
+        where u.last_day is null or u.last_day < (now() at time zone $1)::date
+        group by u.id
+        """,
+        tz,
     )
 
 

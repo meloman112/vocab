@@ -30,6 +30,9 @@ class CardOut(BaseModel):
     forms: str
     irregular: bool
     examples: list[Example]
+    # Рейтинг слова: место по частоте в языке («топ-500») и сколько людей учат.
+    top: str
+    learners: int
     due: datetime
 
 
@@ -46,7 +49,7 @@ class WordEntry(BaseModel):
     forms: str
     irregular: bool
     examples: list[Example]
-    zipf: float
+    top: str
     # Сколько человек учат слово, включая только что добавившего.
     learners: int
     # Различие «добавили» и «уже было» нужно боту, чтобы ответить честно.
@@ -78,15 +81,43 @@ class StatsOut(BaseModel):
     due_now: int
     due_today: int
     forecast: list[ForecastDay]
+    # Дней подряд с повторением; пропущенный день — уже 0.
+    streak: int
+    best_streak: int
 
 
-class DueUser(BaseModel):
+class LeaderRow(BaseModel):
+    place: int
+    name: str
+    xp: int
+    streak: int
+
+
+class LeaderboardOut(BaseModel):
+    top: list[LeaderRow]
+    # Своё место, даже если оно ниже топа. None — на этой неделе не занимался.
+    me: LeaderRow | None
+
+
+class ReminderTarget(BaseModel):
     tg_id: int
+    streak: int
+    # Дней с последнего повторения; None — не повторял ни разу.
+    gap: int | None
     due: int
 
 
 class Ban(BaseModel):
     word: str = Field(min_length=1, max_length=100)
+
+
+class TopWord(BaseModel):
+    word: str
+    translation: str
+    top: str
+    learners: int
+    # Есть ли слово у того, кто спрашивает.
+    mine: bool
 
 
 class SearchHit(BaseModel):

@@ -48,11 +48,17 @@ class VocabAPI:
             "GET", "/words/search", tg_id, params={"q": query, "limit": limit}
         )
 
+    async def top(self, tg_id: int) -> list[dict[str, Any]]:
+        return await self._call("GET", "/words/top", tg_id)
+
     async def weak(self, tg_id: int, limit: int = 20) -> list[dict[str, Any]]:
         return await self._call("GET", "/words/weak", tg_id, params={"limit": limit})
 
-    async def due_users(self) -> list[dict[str, Any]]:
-        return await self._call("GET", "/internal/due")
+    async def leaderboard(self, tg_id: int) -> dict[str, Any]:
+        return await self._call("GET", "/leaderboard", tg_id)
+
+    async def reminder_targets(self) -> list[dict[str, Any]]:
+        return await self._call("GET", "/internal/reminders")
 
     async def ban(self, word: str) -> None:
         await self._call("POST", "/internal/ban", json={"word": word})
