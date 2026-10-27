@@ -1,8 +1,8 @@
 """Ручки. Транспортный слой: разбор запроса, вызов repo, сборка DTO."""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from .. import enrich, repo, srs
+from .. import dictionary, enrich, lexicon, repo, srs
 from ..config import settings
 from . import schemas
 from .auth import current_user, service_only
@@ -10,7 +10,8 @@ from .auth import current_user, service_only
 router = APIRouter()
 
 FORECAST_DAYS = 7
-FAILED_LIMIT = 20
+# Сколько новых слов из общего словаря выдаётся за одно «Давай».
+DISCOVER_LIMIT = 10
 
 
 @router.get("/healthz")
@@ -24,53 +25,23 @@ async def healthz(request: Request) -> dict[str, str]:
 
 @router.post("/words", response_model=schemas.AddWordOut)
 async def add_word(
-    body: schemas.AddWord,
-    background: BackgroundTasks,
-    request: Request,
-    user_id: int = Depends(current_user),
+    body: schemas.AddWord, request: Request, user_id: int = Depends(current_user)
 ) -> schemas.AddWordOut:
-    """Создаёт карточку и запускает обогащение в фоне.
+    """Разбирает текст, заводит карточки и сразу отдаёт перевод.
 
-    Ответ не ждёт модель: смысл всей затеи — слово попадает в систему
-    за две секунды, а перевод догоняет.
+    Ответ ждёт модель, только если слова ещё нет в общем словаре.
     """
-    word = repo.normalize_word(body.word)
-    if not word:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "пустое слово")
-
-    pool = request.app.state.pool
-    async with pool.acquire() as conn:
-        card, created = await repo.add_card(conn, user_id, word, body.source_url)
-
-    if created:
-        background.add_task(
-            enrich.enrich_card, pool, settings(), card["id"], word, body.source_url
+    try:
+        entries = await dictionary.add_text(
+            request.app.state.pool, settings(), user_id, body.word
         )
-
-    return schemas.AddWordOut(
-        id=card["id"], word=card["word"], status=card["status"], created=created
-    )
-
-
-@router.post("/words/{card_id}/retry", status_code=status.HTTP_202_ACCEPTED)
-async def retry_word(
-    card_id: int,
-    background: BackgroundTasks,
-    request: Request,
-    user_id: int = Depends(current_user),
-) -> dict[str, str]:
-    """Повторное обогащение карточки, у которой не разобрался ответ модели."""
-    pool = request.app.state.pool
-    async with pool.acquire() as conn:
-        card = await repo.get_card(conn, user_id, card_id)
-        if card is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "карточка не найдена")
-        await repo.mark_pending(conn, user_id, card_id)
-
-    background.add_task(
-        enrich.enrich_card, pool, settings(), card_id, card["word"], card["source_url"]
-    )
-    return {"status": "pending"}
+    except dictionary.Rejected as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except enrich.EnrichError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "ИИ сейчас не отвечает, пришли слово чуть позже."
+        ) from exc
+    return schemas.AddWordOut(entries=[schemas.WordEntry(**e) for e in entries])
 
 
 @router.get("/queue", response_model=schemas.QueueOut)
@@ -79,6 +50,16 @@ async def get_queue(
 ) -> schemas.QueueOut:
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.queue(conn, user_id, settings().queue_limit)
+    return schemas.QueueOut(cards=[schemas.CardOut(**dict(row)) for row in rows])
+
+
+@router.post("/discover", response_model=schemas.QueueOut)
+async def discover(
+    request: Request, user_id: int = Depends(current_user)
+) -> schemas.QueueOut:
+    """Свои слова кончились — новые из общего словаря, сразу карточками."""
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.discover(conn, user_id, DISCOVER_LIMIT)
     return schemas.QueueOut(cards=[schemas.CardOut(**dict(row)) for row in rows])
 
 
@@ -113,22 +94,16 @@ async def get_stats(
     )
 
 
-@router.get("/words/failed", response_model=list[schemas.FailedCard])
-async def get_failed(
-    request: Request, user_id: int = Depends(current_user)
-) -> list[schemas.FailedCard]:
-    async with request.app.state.pool.acquire() as conn:
-        rows = await repo.failed_cards(conn, user_id, FAILED_LIMIT)
-    return [schemas.FailedCard(**dict(row)) for row in rows]
-
-
 @router.get("/words/search", response_model=list[schemas.SearchHit])
 async def search_words(
     request: Request, q: str, limit: int = 20, user_id: int = Depends(current_user)
 ) -> list[schemas.SearchHit]:
-    """Нужна MCP-тулу search_words; в ТЗ §6 ручки нет, в §9 тул есть."""
+    """Поиск по своим словам. went найдёт go: ищем по лемме запроса."""
+    query = repo.normalize_word(q)
+    if lexicon.is_word(query):
+        query = lexicon.analyze(query).lemma
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.search(conn, user_id, q, min(limit, 100))
+        rows = await repo.search(conn, user_id, query, min(limit, 100))
     return [schemas.SearchHit(**dict(row)) for row in rows]
 
 
@@ -142,24 +117,27 @@ async def weak_words(
     return [schemas.WeakCard(**dict(row)) for row in rows]
 
 
-@router.delete("/words/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_word(
-    card_id: int, request: Request, user_id: int = Depends(current_user)
-) -> None:
-    async with request.app.state.pool.acquire() as conn:
-        if not await repo.delete_card(conn, user_id, card_id):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "карточка не найдена")
-
-
 @router.get(
     "/internal/due",
     response_model=list[schemas.DueUser],
     dependencies=[Depends(service_only)],
 )
 async def internal_due(request: Request) -> list[schemas.DueUser]:
-    """Кого будить напоминанием. Ручка вне ТЗ: планировщик живёт в процессе
-    бота, а в базу ходит только API — иначе схему знали бы два процесса.
+    """Кого будить напоминанием. Планировщик живёт в процессе бота, а в базу
+    ходит только API — иначе схему знали бы два процесса.
     """
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.due_by_user(conn)
     return [schemas.DueUser(tg_id=r["tg_id"], due=r["due"]) for r in rows]
+
+
+@router.post(
+    "/internal/ban",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(service_only)],
+)
+async def internal_ban(body: schemas.Ban, request: Request) -> None:
+    """Убирает слово из общего словаря у всех. Зовёт бот по команде владельца."""
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.ban_word(conn, repo.normalize_word(body.word)):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "такого слова в словаре нет")

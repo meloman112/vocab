@@ -1,6 +1,7 @@
 import type { Card, Rating } from '../../api/types';
 
-export type Phase = 'loading' | 'error' | 'empty' | 'review' | 'done';
+/** empty — свои слова кончились; exhausted — и в общем словаре новых нет. */
+export type Phase = 'loading' | 'error' | 'empty' | 'exhausted' | 'review' | 'done';
 
 export interface SessionState {
   phase: Phase;
@@ -16,7 +17,7 @@ export interface SessionState {
 
 export type SessionAction =
   | { type: 'loading' }
-  | { type: 'loaded'; cards: Card[] }
+  | { type: 'loaded'; cards: Card[]; whenEmpty: 'empty' | 'exhausted' }
   | { type: 'failed'; error: string }
   | { type: 'flip' }
   | { type: 'rate'; rating: Rating }
@@ -40,7 +41,7 @@ export function reducer(state: SessionState, action: SessionAction): SessionStat
     case 'loaded':
       return {
         ...initialState,
-        phase: action.cards.length === 0 ? 'empty' : 'review',
+        phase: action.cards.length === 0 ? action.whenEmpty : 'review',
         cards: action.cards,
       };
 

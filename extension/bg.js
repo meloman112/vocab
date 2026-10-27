@@ -35,11 +35,12 @@ api.contextMenus.onClicked.addListener(async (info) => {
     const response = await fetch(`${host}/words`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Token': token },
-      body: JSON.stringify({ word: info.selectionText, source_url: info.pageUrl }),
+      body: JSON.stringify({ word: info.selectionText }),
     });
-    if (!response.ok) throw new Error(`API вернул ${response.status}`);
-    const card = await response.json();
-    notify('vocab', card.created ? `✅ ${card.word}` : `уже есть: ${card.word}`);
+    const body = await response.json();
+    // 422 — слово не принято, detail написан для человека.
+    if (!response.ok) throw new Error(body.detail ?? `API вернул ${response.status}`);
+    notify('vocab', body.entries.map((e) => `${e.lemma} — ${e.translation}`).join('\n'));
   } catch (error) {
     // Молча проглоченная ошибка здесь означала бы слова, которые
     // «вроде добавил», а их нет.

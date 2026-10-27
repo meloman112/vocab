@@ -29,11 +29,17 @@ export function CardFace({ card, flipped, onFlip }: Props) {
       {flipped && (
         <div className="card__back">
           <Text weight="2">{card.translation}</Text>
-          {card.pos && <Caption className="card__pos">{card.pos}</Caption>}
-          {card.example && <Text className="card__example">{card.example}</Text>}
-          {card.example_ru && (
-            <Caption className="card__example-ru">{card.example_ru}</Caption>
-          )}
+          <Caption className="card__pos">
+            {card.pos}
+            {card.irregular && ' · неправильное'}
+          </Caption>
+          {card.forms && <Caption className="card__pos">{card.forms}</Caption>}
+          {card.examples.map((example) => (
+            <div key={example.en}>
+              <Text className="card__example">{example.en}</Text>
+              <Caption className="card__example-ru">{example.ru}</Caption>
+            </div>
+          ))}
         </div>
       )}
     </Tappable>

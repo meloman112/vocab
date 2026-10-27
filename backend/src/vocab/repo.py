@@ -1,24 +1,36 @@
 """Весь SQL проекта. Наружу отдаёт asyncpg.Record — плоские строки без логики."""
 
+import json
 from typing import Any
 
 import asyncpg
 
-# Список колонок вынесен, чтобы select * не начал утекать в ответ API,
-# когда в cards появится новая техническая колонка.
-CARD_COLUMNS = """
-    id, word, status, translation, ipa, pos, example, example_ru, source_url,
-    state, step, stability, difficulty, due, last_review, created_at
+# Карточка = личное расписание + общее содержимое слова. Список колонок
+# явный, чтобы select * не начал утекать в ответ API с новой колонкой.
+CARD_SELECT = """
+    select c.id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
+           w.irregular, w.examples,
+           c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
+    from cards c join words w on w.id = c.word_id
 """
+
+WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, banned"
+
+# Заблокированное слово пропадает из всех личных очередей и счётчиков.
+USER_CARDS = "cards c join words w on w.id = c.word_id where c.user_id = $1 and not w.banned"
 
 
 def normalize_word(word: str) -> str:
-    """Схлопывает пробелы и регистр: одно слово — одна карточка.
-
-    Регистр теряется намеренно. Иначе выделенное в начале предложения
-    «Resilient» и встреченное позже «resilient» стали бы двумя карточками.
-    """
+    """Схлопывает пробелы и регистр: «Resilient» и «resilient» — одно слово."""
     return " ".join(word.split()).lower()
+
+
+async def init_connection(conn: asyncpg.Connection) -> None:
+    # Без кодека asyncpg отдаёт jsonb строкой, и examples уехали бы
+    # в ответ API экранированным текстом.
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
 
 
 async def ensure_user(conn: asyncpg.Connection, tg_id: int) -> int:
@@ -32,27 +44,97 @@ async def ensure_user(conn: asyncpg.Connection, tg_id: int) -> int:
     )
 
 
-async def add_card(
-    conn: asyncpg.Connection, user_id: int, word: str, source_url: str | None
-) -> tuple[asyncpg.Record, bool]:
-    """Создаёт карточку. Второй элемент — была ли она создана сейчас."""
-    row = await conn.fetchrow(
-        f"insert into cards (user_id, word, source_url) values ($1, $2, $3)"
-        f" on conflict (user_id, word) do nothing"
-        f" returning {CARD_COLUMNS}",
+async def spend_llm(conn: asyncpg.Connection, user_id: int, tz: str) -> int:
+    """Учитывает запрос к ИИ и возвращает, сколько их сегодня с этим."""
+    return await conn.fetchval(
+        "update users set"
+        " llm_used = case when llm_day = (now() at time zone $2)::date"
+        "                 then llm_used + 1 else 1 end,"
+        " llm_day = (now() at time zone $2)::date"
+        " where id = $1 returning llm_used",
         user_id,
-        word,
-        source_url,
+        tz,
     )
-    if row is not None:
-        return row, True
 
-    existing = await conn.fetchrow(
-        f"select {CARD_COLUMNS} from cards where user_id = $1 and word = $2",
-        user_id,
-        word,
+
+async def get_word(conn: asyncpg.Connection, lemma: str) -> asyncpg.Record | None:
+    return await conn.fetchrow(f"select {WORD_COLUMNS} from words where lemma = $1", lemma)
+
+
+async def save_word(
+    conn: asyncpg.Connection, lemma: str, zipf: float, fields: dict[str, Any]
+) -> asyncpg.Record:
+    # do update: двое прислали одно новое слово одновременно — оба ответа
+    # модели годятся, побеждает последний, а ошибки ни у кого нет.
+    return await conn.fetchrow(
+        f"insert into words (lemma, zipf, translation, ipa, pos, forms, irregular, examples)"
+        f" values ($1, $2, $3, $4, $5, $6, $7, $8)"
+        f" on conflict (lemma) do update set"
+        f"  translation = excluded.translation, ipa = excluded.ipa, pos = excluded.pos,"
+        f"  forms = excluded.forms, irregular = excluded.irregular,"
+        f"  examples = excluded.examples"
+        f" returning {WORD_COLUMNS}",
+        lemma,
+        zipf,
+        fields["translation"],
+        fields["ipa"],
+        fields["pos"],
+        fields["forms"],
+        fields["irregular"],
+        fields["examples"],
     )
-    return existing, False
+
+
+async def ban_word(conn: asyncpg.Connection, lemma: str) -> bool:
+    tag = await conn.execute("update words set banned = true where lemma = $1", lemma)
+    return tag.endswith(" 1")
+
+
+async def learners(conn: asyncpg.Connection, word_id: int) -> int:
+    return await conn.fetchval("select count(*) from cards where word_id = $1", word_id)
+
+
+async def add_card(conn: asyncpg.Connection, user_id: int, word_id: int) -> bool:
+    """Заводит карточку. False — слово у пользователя уже было."""
+    card_id = await conn.fetchval(
+        "insert into cards (user_id, word_id) values ($1, $2)"
+        " on conflict (user_id, word_id) do nothing returning id",
+        user_id,
+        word_id,
+    )
+    return card_id is not None
+
+
+async def discover(
+    conn: asyncpg.Connection, user_id: int, limit: int
+) -> list[asyncpg.Record]:
+    """Берёт из общего словаря слова, которых у пользователя нет, и сразу
+    заводит на них карточки: сначала те, что учат больше людей, потом
+    самые частые в языке.
+
+    Пока пользователей мало, популярность у всех одинаковая и порядок
+    фактически задаёт частота.
+    """
+    ids = await conn.fetch(
+        """
+        insert into cards (user_id, word_id)
+        select $1, w.id from words w
+        where not w.banned
+          and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)
+        order by (select count(*) from cards c where c.word_id = w.id) desc,
+                 w.zipf desc, w.id
+        limit $2
+        on conflict do nothing
+        returning id
+        """,
+        user_id,
+        limit,
+    )
+    # array_position сохраняет порядок выборки выше: популярные слова первыми.
+    return await conn.fetch(
+        f"{CARD_SELECT} where c.id = any($1::bigint[]) order by array_position($1::bigint[], c.id)",
+        [r["id"] for r in ids],
+    )
 
 
 async def get_card(
@@ -61,9 +143,7 @@ async def get_card(
     # user_id в условии, а не только в проверке после выборки: иначе чужая
     # карточка утекала бы уже самим фактом ответа 200.
     return await conn.fetchrow(
-        f"select {CARD_COLUMNS} from cards where id = $1 and user_id = $2",
-        card_id,
-        user_id,
+        f"{CARD_SELECT} where c.id = $1 and c.user_id = $2", card_id, user_id
     )
 
 
@@ -71,9 +151,8 @@ async def queue(
     conn: asyncpg.Connection, user_id: int, limit: int
 ) -> list[asyncpg.Record]:
     return await conn.fetch(
-        f"select {CARD_COLUMNS} from cards"
-        f" where user_id = $1 and status = 'ready' and due <= now()"
-        f" order by due limit $2",
+        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and c.due <= now()"
+        f" order by c.due limit $2",
         user_id,
         limit,
     )
@@ -105,54 +184,6 @@ async def apply_review(
         )
 
 
-async def set_enrichment(
-    conn: asyncpg.Connection, card_id: int, fields: dict[str, str]
-) -> None:
-    await conn.execute(
-        "update cards set status = 'ready', translation = $2, ipa = $3,"
-        " pos = $4, example = $5, example_ru = $6 where id = $1",
-        card_id,
-        fields["translation"],
-        fields["ipa"],
-        fields["pos"],
-        fields["example"],
-        fields["example_ru"],
-    )
-
-
-async def mark_failed(conn: asyncpg.Connection, card_id: int) -> None:
-    await conn.execute("update cards set status = 'failed' where id = $1", card_id)
-
-
-async def mark_pending(conn: asyncpg.Connection, user_id: int, card_id: int) -> bool:
-    """Возвращает карточку в очередь на обогащение. False — карточки нет."""
-    status = await conn.fetchval(
-        "update cards set status = 'pending' where id = $1 and user_id = $2"
-        " returning status",
-        card_id,
-        user_id,
-    )
-    return status is not None
-
-
-async def failed_cards(
-    conn: asyncpg.Connection, user_id: int, limit: int
-) -> list[asyncpg.Record]:
-    return await conn.fetch(
-        "select id, word from cards where user_id = $1 and status = 'failed'"
-        " order by created_at desc limit $2",
-        user_id,
-        limit,
-    )
-
-
-async def delete_card(conn: asyncpg.Connection, user_id: int, card_id: int) -> bool:
-    tag = await conn.execute(
-        "delete from cards where id = $1 and user_id = $2", card_id, user_id
-    )
-    return tag.endswith(" 1")
-
-
 async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Record:
     """Сводка одним запросом.
 
@@ -161,19 +192,16 @@ async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Reco
     от параметров FSRS и менялся бы при их дообучении.
     """
     return await conn.fetchrow(
-        """
+        f"""
         select
-          count(*)                                                   as total,
-          count(*) filter (where status = 'ready' and state = 2)      as learned,
-          count(*) filter (where status = 'pending')                  as pending,
-          count(*) filter (where status = 'failed')                   as failed,
-          count(*) filter (where status = 'ready' and due <= now())   as due_now,
+          count(*)                                   as total,
+          count(*) filter (where c.state = 2)        as learned,
+          count(*) filter (where c.due <= now())     as due_now,
           count(*) filter (
-            where status = 'ready'
-              and due < (date_trunc('day', now() at time zone $2) + interval '1 day')
-                        at time zone $2
-          )                                                           as due_today
-        from cards where user_id = $1
+            where c.due < (date_trunc('day', now() at time zone $2) + interval '1 day')
+                          at time zone $2
+          )                                          as due_today
+        from {USER_CARDS}
         """,
         user_id,
         tz,
@@ -189,21 +217,17 @@ async def forecast(
     попасть в ответ нулями, иначе график на фронте съедет.
     """
     return await conn.fetch(
-        """
+        f"""
         with days as (
           select generate_series(
             date_trunc('day', now() at time zone $2),
             date_trunc('day', now() at time zone $2) + make_interval(days => $3 - 1),
             interval '1 day'
           )::date as day
-        )
-        select days.day,
-               count(c.id) as count
-        from days
-        left join cards c
-          on c.user_id = $1
-         and c.status = 'ready'
-         and (c.due at time zone $2)::date = days.day
+        ),
+        due as (select (c.due at time zone $2)::date as day from {USER_CARDS})
+        select days.day, count(due.day) as count
+        from days left join due on due.day = days.day
         group by days.day
         order by days.day
         """,
@@ -216,10 +240,10 @@ async def forecast(
 async def due_by_user(conn: asyncpg.Connection) -> list[asyncpg.Record]:
     """Для напоминаний бота: у кого прямо сейчас есть что повторять."""
     return await conn.fetch(
-        "select u.tg_id, count(c.id) as due"
-        " from users u join cards c on c.user_id = u.id"
-        " where c.status = 'ready' and c.due <= now()"
-        " group by u.tg_id having count(c.id) > 0"
+        "select u.tg_id, count(*) as due"
+        " from users u join cards c on c.user_id = u.id join words w on w.id = c.word_id"
+        " where not w.banned and c.due <= now()"
+        " group by u.tg_id"
     )
 
 
@@ -227,8 +251,8 @@ async def search(
     conn: asyncpg.Connection, user_id: int, query: str, limit: int
 ) -> list[asyncpg.Record]:
     return await conn.fetch(
-        "select id, word, translation, status, due from cards"
-        " where user_id = $1 and word like $2 order by word limit $3",
+        f"select c.id, w.lemma as word, w.translation, c.due from {USER_CARDS}"
+        f" and w.lemma like $2 order by w.lemma limit $3",
         user_id,
         f"%{normalize_word(query)}%",
         limit,
@@ -240,13 +264,13 @@ async def weak_cards(
 ) -> list[asyncpg.Record]:
     """Карточки с наибольшим числом провалов (rating = 1, Again)."""
     return await conn.fetch(
-        "select c.id, c.word, c.translation, c.example,"
-        " count(r.id) filter (where r.rating = 1) as lapses"
-        " from cards c left join reviews r on r.card_id = c.id"
-        " where c.user_id = $1"
-        " group by c.id, c.word, c.translation, c.example"
-        " having count(r.id) filter (where r.rating = 1) > 0"
-        " order by lapses desc, c.word limit $2",
+        "select c.id, w.lemma as word, w.translation, w.examples, count(*) as lapses"
+        " from cards c"
+        " join words w on w.id = c.word_id"
+        " join reviews r on r.card_id = c.id and r.rating = 1"
+        " where c.user_id = $1 and not w.banned"
+        " group by c.id, w.lemma, w.translation, w.examples"
+        " order by lapses desc, w.lemma limit $2",
         user_id,
         limit,
     )

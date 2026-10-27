@@ -5,6 +5,8 @@ from pathlib import Path
 
 import asyncpg
 
+from .repo import init_connection
+
 log = logging.getLogger(__name__)
 
 # Миграции лежат внутри пакета, а не рядом с ним: после pip install код
@@ -14,8 +16,8 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
 async def create_pool(dsn: str) -> asyncpg.Pool:
-    # min_size=1: сервис личный, держать пустые соединения незачем.
-    pool = await asyncpg.create_pool(dsn, min_size=1, max_size=10)
+    # min_size=1: нагрузка маленькая, держать пустые соединения незачем.
+    pool = await asyncpg.create_pool(dsn, min_size=1, max_size=10, init=init_connection)
     assert pool is not None  # create_pool возвращает Optional только при loop=None
     return pool
 

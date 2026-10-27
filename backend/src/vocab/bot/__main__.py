@@ -11,7 +11,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from ..client import VocabAPI
 from ..config import settings
 from .handlers import router
-from .middleware import OwnerOnly
 from .reminders import start_scheduler
 
 log = logging.getLogger(__name__)
@@ -27,8 +26,6 @@ async def main() -> None:
     api = VocabAPI(cfg)
 
     dispatcher = Dispatcher()
-    dispatcher.message.middleware(OwnerOnly(cfg.owner_tg_id))
-    dispatcher.callback_query.middleware(OwnerOnly(cfg.owner_tg_id))
     dispatcher.include_router(router)
 
     # Всё, что может упасть, — внутри try: иначе отказ Telegram на первом же

@@ -1,12 +1,18 @@
+export interface Example {
+  en: string;
+  ru: string;
+}
+
 export interface Card {
   id: number;
   word: string;
-  status: string;
-  translation: string | null;
-  ipa: string | null;
-  pos: string | null;
-  example: string | null;
-  example_ru: string | null;
+  translation: string;
+  ipa: string;
+  pos: string;
+  /** go · went · gone; пустая строка, если формы правильные. */
+  forms: string;
+  irregular: boolean;
+  examples: Example[];
   due: string;
 }
 

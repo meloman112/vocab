@@ -8,15 +8,21 @@ import { initialState, reducer } from './session';
 export function useReviewSession() {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const load = useCallback(async () => {
-    dispatch({ type: 'loading' });
-    try {
-      const { cards } = await api.queue();
-      dispatch({ type: 'loaded', cards });
-    } catch (error) {
-      dispatch({ type: 'failed', error: (error as Error).message });
-    }
-  }, []);
+  const fetchCards = useCallback(
+    async (source: typeof api.queue, whenEmpty: 'empty' | 'exhausted') => {
+      dispatch({ type: 'loading' });
+      try {
+        const { cards } = await source();
+        dispatch({ type: 'loaded', cards, whenEmpty });
+      } catch (error) {
+        dispatch({ type: 'failed', error: (error as Error).message });
+      }
+    },
+    [],
+  );
+
+  const load = useCallback(() => fetchCards(api.queue, 'empty'), [fetchCards]);
+  const learnNew = useCallback(() => fetchCards(api.discover, 'exhausted'), [fetchCards]);
 
   useEffect(() => {
     void load();
@@ -46,5 +52,5 @@ export function useReviewSession() {
     [state.cards, state.index],
   );
 
-  return { state, flip, rate, reload: load } as const;
+  return { state, flip, rate, reload: load, learnNew } as const;
 }

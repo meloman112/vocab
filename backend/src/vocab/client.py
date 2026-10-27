@@ -16,7 +16,9 @@ class VocabAPI:
         self._client = httpx.AsyncClient(
             base_url=cfg.api_base_url,
             headers={"X-Token": cfg.api_token},
-            timeout=httpx.Timeout(10.0),
+            # Новое слово ждёт ответа ИИ: до двух попыток по 20 секунд, а для
+            # фразы ещё и поиск фраз перед ними.
+            timeout=httpx.Timeout(90.0),
         )
 
     async def close(self) -> None:
@@ -34,21 +36,12 @@ class VocabAPI:
             return None
         return response.json()
 
-    async def add_word(
-        self, tg_id: int, word: str, source_url: str | None = None
-    ) -> dict[str, Any]:
-        return await self._call(
-            "POST", "/words", tg_id, json={"word": word, "source_url": source_url}
-        )
-
-    async def retry(self, tg_id: int, card_id: int) -> dict[str, Any]:
-        return await self._call("POST", f"/words/{card_id}/retry", tg_id)
+    async def add_word(self, tg_id: int, word: str) -> list[dict[str, Any]]:
+        body = await self._call("POST", "/words", tg_id, json={"word": word})
+        return body["entries"]
 
     async def stats(self, tg_id: int) -> dict[str, Any]:
         return await self._call("GET", "/stats", tg_id)
-
-    async def failed(self, tg_id: int) -> list[dict[str, Any]]:
-        return await self._call("GET", "/words/failed", tg_id)
 
     async def search(self, tg_id: int, query: str, limit: int = 20) -> list[dict[str, Any]]:
         return await self._call(
@@ -60,3 +53,6 @@ class VocabAPI:
 
     async def due_users(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/due")
+
+    async def ban(self, word: str) -> None:
+        await self._call("POST", "/internal/ban", json={"word": word})

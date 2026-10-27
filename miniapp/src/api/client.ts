@@ -27,6 +27,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   queue: () => request<{ cards: Card[] }>('/queue'),
 
+  /** Новые слова из общего словаря — сервер сразу заводит на них карточки. */
+  discover: () => request<{ cards: Card[] }>('/discover', { method: 'POST' }),
+
   review: (cardId: number, rating: Rating) =>
     request<ReviewResult>('/review', {
       method: 'POST',

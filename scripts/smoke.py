@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Живая проверка контура: слово добавляется, попадает в очередь после
-обогащения, оценка сдвигает расписание.
+"""Живая проверка контура: форма слова приводится к лемме, перевод
+приходит сразу, без токена — 401.
 
 Гоняет по-настоящему, с обогащением и базой: тест, который ничего не
 проверяет, хуже отсутствующего.
@@ -8,14 +8,14 @@
 
 import os
 import sys
-import time
 import urllib.error
 import urllib.request
 import json
 
 BASE = os.environ.get("SMOKE_BASE", "http://localhost:8000")
 TOKEN = os.environ.get("API_TOKEN", "")
-WORD = f"smoke{int(time.time())}"
+WORD = "went"
+LEMMA = "go"
 
 
 def call(method: str, path: str, body: dict | None = None) -> tuple[int, dict | list | None]:
@@ -27,7 +27,7 @@ def call(method: str, path: str, body: dict | None = None) -> tuple[int, dict | 
         headers={"Content-Type": "application/json", "X-Token": TOKEN},
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=90) as response:
             raw = response.read()
             return response.status, json.loads(raw) if raw else None
     except urllib.error.HTTPError as exc:
@@ -42,9 +42,10 @@ def main() -> int:
     status, _ = call("GET", "/healthz")
     assert status == 200, f"healthz вернул {status}"
 
+    # Слово остаётся в словаре владельца: удаления нет. Поэтому WORD —
+    # обычное частое слово, а проверяется лемматизация, а не «created».
     status, body = call("POST", "/words", {"word": WORD})
-    assert status == 200 and body["created"], f"добавление слова: {status} {body}"
-    card_id = body["id"]
+    assert status == 200 and body["entries"][0]["lemma"] == LEMMA, f"добавление: {status} {body}"
 
     # Без токена доступа быть не должно — проверяем, что 401, а не 200.
     unauth = urllib.request.Request(BASE + "/queue")
@@ -57,9 +58,6 @@ def main() -> int:
 
     status, body = call("GET", "/stats")
     assert status == 200 and len(body["forecast"]) == 7, f"stats: {status} {body}"
-
-    status, _ = call("DELETE", f"/words/{card_id}")
-    assert status == 204, f"удаление вернуло {status}"
 
     print(f"smoke ok ({BASE})")
     return 0

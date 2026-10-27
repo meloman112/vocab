@@ -15,9 +15,9 @@ TEMPLATE = (
     "if(!w)return alert('ничего не выделено');"
     "fetch('https://{host}/words',{{method:'POST',"
     "headers:{{'Content-Type':'application/json','X-Token':'{token}'}},"
-    "body:JSON.stringify({{word:w,source_url:location.href}})}})"
-    ".then(r=>r.ok?r.json():Promise.reject(r.status))"
-    ".then(c=>alert(c.created?'✅ '+c.word:'уже есть: '+c.word))"
+    "body:JSON.stringify({{word:w}})}})"
+    ".then(r=>r.json().then(b=>r.ok?b:Promise.reject(b.detail||r.status)))"
+    ".then(b=>alert(b.entries.map(e=>e.lemma+' — '+e.translation).join('\\n')))"
     ".catch(e=>alert('vocab: ошибка '+e));}})()"
 )
 

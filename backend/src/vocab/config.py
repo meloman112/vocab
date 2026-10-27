@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com"
+    # Запросов к ИИ на пользователя в день. Бот публичный, платим мы;
+    # уже переведённые слова из общего словаря лимит не тратят.
+    llm_daily_limit: int = 30
 
     # Бот и MCP ходят в API по имени сервиса в docker-сети: снаружи запрос
     # уехал бы через Caddy и внешний канал ради вызова соседа по локальной сети.

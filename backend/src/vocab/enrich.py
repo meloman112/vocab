@@ -1,60 +1,91 @@
-"""Обогащение карточки через DeepSeek: перевод, транскрипция, пример."""
+"""Запросы к DeepSeek: содержимое карточки для леммы и поиск фраз в тексте."""
 
 import json
 import logging
+from typing import Any
 
-import asyncpg
 import httpx
 
-from . import repo
 from .config import Settings
 
 log = logging.getLogger(__name__)
 
-REQUIRED_FIELDS = ("translation", "ipa", "pos", "example", "example_ru")
+WORD_PROMPT = """\
+Ты составляешь карточки для запоминания английских слов и устойчивых фраз.
+Отвечай только JSON-объектом с полями:
 
-SYSTEM_PROMPT = """\
-Ты помогаешь составлять карточки для запоминания английских слов.
-Отвечай только JSON-объектом с полями translation, ipa, pos, example, example_ru.
-
-translation — перевод на русский, 1-3 варианта через запятую.
+translation — перевод на русский, 1-3 самых частых значения через запятую.
 ipa — транскрипция IPA без косых черт.
 pos — часть речи одним английским словом (noun, verb, adjective, adverb, phrase).
-example — простое предложение с этим словом, уровень A2-B1, не длиннее 12 слов.
-example_ru — перевод предложения на русский.
+forms — для глагола три формы через « · » (go · went · gone), для
+  существительного с неправильным множественным числом — ед. и мн. (child · children),
+  иначе пустая строка.
+irregular — true, если глагол неправильный или множественное число неправильное.
+examples — массив из двух объектов {"en": ..., "ru": ...}: простые предложения
+  уровня A2-B1 не длиннее 12 слов и их перевод.
 
-Если слово многозначное, выбирай значение, подходящее к присланному контексту.
 Никаких пояснений и markdown вне JSON.
 """
 
+PHRASES_PROMPT = """\
+Тебе пришлют английский текст. Найди в нём устойчивые выражения, которые стоит
+учить целиком: фразовые глаголы (give up), идиомы (by the way), парные и
+повторные конструкции (more and more, the more... the better), устойчивые
+связки (as soon as, in order to).
+
+Отдельные слова и свободные сочетания не нужны. Каждую фразу приведи к
+словарной форме в нижнем регистре: gave up → give up.
+
+Отвечай только JSON-объектом {"phrases": [...]}. Ничего не нашёл — пустой массив.
+"""
+
 TIMEOUT = httpx.Timeout(20.0)
+ATTEMPTS = 2
 
 
-def _user_prompt(word: str, context: str | None) -> str:
-    if not context:
-        return f"Слово: {word}"
-    return f"Слово: {word}\nКонтекст (страница, где оно встретилось): {context}"
+class EnrichError(Exception):
+    """ИИ не ответил или ответил не по формату — и так оба раза."""
 
 
-def parse_answer(content: str) -> dict[str, str]:
+def parse_word(content: str) -> dict[str, Any]:
     """Разбирает ответ модели. Отдельно от запроса, потому что ломается
     именно здесь: сеть либо работает, либо нет, а формат ответа плавает."""
     data = json.loads(content)
-    # Модель может вернуть валидный JSON без нужного поля — тогда карточка
-    # уехала бы в 'ready' с пустым переводом, и починить её было бы нечем.
-    missing = [name for name in REQUIRED_FIELDS if not data.get(name)]
+    # Валидный JSON без перевода — самый вероятный кривой ответ. Без проверки
+    # слово уехало бы в общий словарь пустым, сразу всем.
+    missing = [name for name in ("translation", "ipa", "pos") if not data.get(name)]
     if missing:
         raise ValueError(f"в ответе модели нет полей: {', '.join(missing)}")
-    return {name: str(data[name]).strip() for name in REQUIRED_FIELDS}
+
+    examples = [
+        {"en": str(e["en"]).strip(), "ru": str(e["ru"]).strip()}
+        for e in data.get("examples") or []
+        if isinstance(e, dict) and e.get("en") and e.get("ru")
+    ]
+    if not examples:
+        raise ValueError("в ответе модели нет примеров")
+
+    return {
+        "translation": str(data["translation"]).strip(),
+        "ipa": str(data["ipa"]).strip(),
+        "pos": str(data["pos"]).strip(),
+        "forms": str(data.get("forms") or "").strip(),
+        "irregular": data.get("irregular") is True,
+        "examples": examples,
+    }
 
 
-async def fetch_fields(cfg: Settings, word: str, context: str | None) -> dict[str, str]:
-    """Один запрос к модели. Бросает исключение, если ответ не разобрать."""
+def parse_phrases(content: str) -> list[str]:
+    phrases = json.loads(content)["phrases"]
+    return [" ".join(str(p).split()).lower() for p in phrases if str(p).strip()]
+
+
+async def _chat(cfg: Settings, system: str, user: str) -> str:
     payload = {
         "model": cfg.deepseek_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _user_prompt(word, context)},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
         # Строгий JSON на стороне API: без него модель периодически
         # оборачивает ответ в ```json и парсер падает.
@@ -68,36 +99,26 @@ async def fetch_fields(cfg: Settings, word: str, context: str | None) -> dict[st
             headers={"Authorization": f"Bearer {cfg.deepseek_api_key}"},
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-
-    return parse_answer(content)
+        return response.json()["choices"][0]["message"]["content"]
 
 
-async def enrich_card(pool: asyncpg.Pool, cfg: Settings, card_id: int, word: str,
-                      source_url: str | None) -> None:
-    """Фоновая задача: обогатить карточку или пометить её failed.
-
-    Ретраев ровно два (первый запрос плюс один повтор) и они не размазаны
-    по времени: очередь с бэкоффом ради личного словаря — отдельный сервис,
-    а неудачную карточку и так можно перезапустить кнопкой.
-    """
+async def _ask(cfg: Settings, system: str, user: str, parse):
+    """Запрос с одним повтором. Очередь с бэкоффом не нужна: пользователь
+    ждёт ответа в чате и при отказе просто пришлёт слово ещё раз."""
     if not cfg.deepseek_api_key:
-        log.warning("DEEPSEEK_API_KEY пуст, карточка %s остаётся pending", card_id)
-        return
+        raise EnrichError("DEEPSEEK_API_KEY пуст")
 
-    last_error: Exception | None = None
-    for attempt in (1, 2):
+    for attempt in range(1, ATTEMPTS + 1):
         try:
-            fields = await fetch_fields(cfg, word, source_url)
-        except Exception as exc:  # noqa: BLE001 — причина уходит в лог ниже
-            last_error = exc
-            log.warning("обогащение %s: попытка %s не удалась: %s", card_id, attempt, exc)
-            continue
+            return parse(await _chat(cfg, system, user))
+        except Exception as exc:  # noqa: BLE001 — причина уходит в лог, итог — в EnrichError
+            log.warning("ИИ: попытка %s для %r не удалась: %s", attempt, user, exc)
+    raise EnrichError(f"ИИ не ответил на {user!r}")
 
-        async with pool.acquire() as conn:
-            await repo.set_enrichment(conn, card_id, fields)
-        return
 
-    log.error("обогащение %s провалено: %s", card_id, last_error)
-    async with pool.acquire() as conn:
-        await repo.mark_failed(conn, card_id)
+async def fetch_word(cfg: Settings, lemma: str) -> dict[str, Any]:
+    return await _ask(cfg, WORD_PROMPT, lemma, parse_word)
+
+
+async def find_phrases(cfg: Settings, text: str) -> list[str]:
+    return await _ask(cfg, PHRASES_PROMPT, text, parse_phrases)

@@ -6,7 +6,7 @@ import { SessionSummary } from './features/review/SessionSummary';
 import { appearance, platform } from './lib/telegram';
 
 export function App() {
-  const { state, flip, rate, reload } = useReviewSession();
+  const { state, flip, rate, reload, learnNew } = useReviewSession();
 
   return (
     <AppRoot appearance={appearance} platform={platform}>
@@ -35,8 +35,21 @@ export function App() {
       case 'empty':
         return (
           <Placeholder
-            header="Пусто"
-            description="Сейчас повторять нечего. Пришли боту новое слово."
+            header="Свои слова на сегодня всё"
+            description="Взять новые из общего словаря? Сначала те, что учат чаще всего."
+            className="screen"
+          >
+            <Button size="l" mode="filled" onClick={learnNew}>
+              Давай
+            </Button>
+          </Placeholder>
+        );
+
+      case 'exhausted':
+        return (
+          <Placeholder
+            header="Новых слов нет"
+            description="Ты разобрал весь общий словарь. Пришли боту своё слово."
             className="screen"
           />
         );

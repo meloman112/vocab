@@ -50,15 +50,15 @@ class BearerGuard:
 
 def build_mcp_app(cfg: Settings):
     """Собирает ASGI-приложение MCP. Тулы работают от владельца словаря:
-    транспорт MCP не несёт пользователя, а словарь пока один."""
+    транспорт MCP не несёт пользователя."""
     mcp = FastMCP("vocab")
     api = VocabAPI(cfg)
     tg_id = cfg.owner_tg_id
 
     @mcp.tool
-    async def add_word(word: str, context: str | None = None) -> dict:
-        """Добавить английское слово в словарь. context — где оно встретилось."""
-        return await api.add_word(tg_id, word, context)
+    async def add_word(word: str) -> list[dict]:
+        """Добавить английское слово или фразу. Возвращает перевод, формы и примеры."""
+        return await api.add_word(tg_id, word)
 
     @mcp.tool
     async def due_count() -> dict:
@@ -68,7 +68,7 @@ def build_mcp_app(cfg: Settings):
 
     @mcp.tool
     async def search_words(query: str, limit: int = 20) -> list[dict]:
-        """Найти карточки по части слова."""
+        """Найти свои слова по части слова; went найдёт go."""
         return await api.search(tg_id, query, limit)
 
     @mcp.tool

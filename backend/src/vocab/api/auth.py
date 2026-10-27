@@ -57,9 +57,8 @@ def _tg_id_from_token(
 ) -> int:
     if not hmac.compare_digest(token.encode(), cfg.api_token.encode()):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "неверный токен")
-    # Букмарклет и MCP работают от владельца и tg_id не знают. Бот знает и
-    # присылает — этим одна строка кода оставляет дверь мультиюзеру открытой,
-    # не добавляя его сейчас.
+    # Бот работает от имени того, кто ему пишет, и присылает его tg_id.
+    # Букмарклет, расширение и MCP tg_id не знают — они от владельца.
     if tg_id_header:
         return int(tg_id_header)
     return cfg.owner_tg_id

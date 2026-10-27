@@ -1,5 +1,5 @@
 """DTO. Доменная строка из базы наружу as is не уходит: новая техническая
-колонка в cards не должна автоматически утечь в ответ."""
+колонка не должна автоматически утечь в ответ."""
 
 from datetime import date, datetime
 
@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 
 class AddWord(BaseModel):
-    word: str = Field(min_length=1, max_length=100)
-    source_url: str | None = Field(default=None, max_length=2000)
+    # Не только слово: из фразы или предложения достаются устойчивые выражения.
+    word: str = Field(min_length=1, max_length=300)
 
 
 class Review(BaseModel):
@@ -16,25 +16,45 @@ class Review(BaseModel):
     rating: int = Field(ge=1, le=4)
 
 
+class Example(BaseModel):
+    en: str
+    ru: str
+
+
 class CardOut(BaseModel):
     id: int
     word: str
-    status: str
-    translation: str | None
-    ipa: str | None
-    pos: str | None
-    example: str | None
-    example_ru: str | None
+    translation: str
+    ipa: str
+    pos: str
+    forms: str
+    irregular: bool
+    examples: list[Example]
     due: datetime
 
 
-class AddWordOut(BaseModel):
-    id: int
-    word: str
-    status: str
-    # Различие «создали» и «уже было» нужно боту, чтобы ответить
-    # «уже есть» вместо второго «added».
+class WordEntry(BaseModel):
+    """Ответ на присланное слово: содержимое из общего словаря плюс то,
+    что касается именно этого запроса."""
+
+    lemma: str
+    # «форма на -ing: Continuous или герундий» — если прислали не лемму.
+    form_note: str | None
+    translation: str
+    ipa: str
+    pos: str
+    forms: str
+    irregular: bool
+    examples: list[Example]
+    zipf: float
+    # Сколько человек учат слово, включая только что добавившего.
+    learners: int
+    # Различие «добавили» и «уже было» нужно боту, чтобы ответить честно.
     created: bool
+
+
+class AddWordOut(BaseModel):
+    entries: list[WordEntry]
 
 
 class QueueOut(BaseModel):
@@ -55,8 +75,6 @@ class ForecastDay(BaseModel):
 class StatsOut(BaseModel):
     total: int
     learned: int
-    pending: int
-    failed: int
     due_now: int
     due_today: int
     forecast: list[ForecastDay]
@@ -67,22 +85,20 @@ class DueUser(BaseModel):
     due: int
 
 
-class FailedCard(BaseModel):
-    id: int
-    word: str
+class Ban(BaseModel):
+    word: str = Field(min_length=1, max_length=100)
 
 
 class SearchHit(BaseModel):
     id: int
     word: str
-    translation: str | None
-    status: str
+    translation: str
     due: datetime
 
 
 class WeakCard(BaseModel):
     id: int
     word: str
-    translation: str | None
-    example: str | None
+    translation: str
+    examples: list[Example]
     lapses: int
