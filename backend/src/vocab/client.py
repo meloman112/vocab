@@ -16,9 +16,9 @@ class VocabAPI:
         self._client = httpx.AsyncClient(
             base_url=cfg.api_base_url,
             headers={"X-Token": cfg.api_token},
-            # Новое слово ждёт ответа ИИ: до двух попыток по 20 секунд, а для
+            # Новое слово ждёт ответа ИИ: до двух попыток по 120 секунд, а для
             # фразы ещё и поиск фраз перед ними.
-            timeout=httpx.Timeout(90.0),
+            timeout=httpx.Timeout(360.0),
         )
 
     async def close(self) -> None:

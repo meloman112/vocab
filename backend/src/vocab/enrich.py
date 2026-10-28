@@ -49,7 +49,9 @@ PHRASES_PROMPT = """\
 
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
-TIMEOUT = httpx.Timeout(20.0)
+# Локальная Qwen на общем сервере: карточка генерируется ~50 с, а занятый
+# чужим запросом слот добавляет очередь.
+TIMEOUT = httpx.Timeout(120.0)
 ATTEMPTS = 2
 
 
@@ -114,6 +116,9 @@ async def _chat(cfg: Settings, system: str, user: str) -> str:
         # оборачивает ответ в ```json и парсер падает.
         "response_format": {"type": "json_object"},
         "temperature": 0.3,
+        # Qwen3 по умолчанию сначала рассуждает: при ~4 токенах в секунду
+        # это минуты ожидания ради карточки, которую она пишет и без них.
+        "chat_template_kwargs": {"enable_thinking": False},
     }
     async with httpx.AsyncClient(base_url=cfg.deepseek_base_url, timeout=TIMEOUT) as client:
         response = await client.post(
