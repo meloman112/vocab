@@ -41,11 +41,32 @@ RANKED_FORMS = 60_000
 TOP_STEPS = (100, 500, 1000, 2000, 5000, 10000, 20000)
 
 
+# Часть речи карточки в общем словаре → метка lemminflect.
+POS_UPOS = {"noun": "NOUN", "verb": "VERB", "adjective": "ADJ", "adverb": "ADV"}
+
+
 @dataclass(frozen=True)
 class Analysis:
     lemma: str
-    # None — прислана сама лемма, объяснять нечего.
-    form_note: str | None
+    # Пары (часть речи, пометка). Пусто — прислана сама лемма, объяснять нечего.
+    notes: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def form_note(self) -> str | None:
+        """Все прочтения формы: books — и «книги», и «бронирует»."""
+        return " / ".join(dict.fromkeys(note for _, note in self.notes)) or None
+
+    def note_for(self, pos: str | None) -> str | None:
+        """Пометка для карточки с этой частью речи.
+
+        Карточка показывает одно значение: bicycle — noun, «велосипед».
+        Пометка «he/she/it» рядом с существительным сбивает с толку того,
+        кто проверить её не может, поэтому берутся только прочтения той же
+        части речи. Не совпало ни одно (фраза, модальный глагол) — все.
+        """
+        upos = POS_UPOS.get(pos or "")
+        same = tuple(n for n in self.notes if n[0] == upos)
+        return Analysis(self.lemma, same or self.notes).form_note
 
 
 def analyze(word: str) -> Analysis:
@@ -61,8 +82,8 @@ def analyze(word: str) -> Analysis:
             if lemma == word or ("-" in lemma and "-" not in word):
                 continue
             if zipf_frequency(lemma, "en") >= floor:
-                return Analysis(lemma, _form_note(word, lemma, lemmas))
-    return Analysis(word, None)
+                return Analysis(lemma, _form_notes(word, lemma, lemmas))
+    return Analysis(word)
 
 
 # Для пометок существительное первым: bicycles без контекста — скорее
@@ -70,17 +91,19 @@ def analyze(word: str) -> Analysis:
 NOTE_ORDER = ("NOUN", "VERB", "ADJ", "ADV")
 
 
-def _form_note(word: str, lemma: str, lemmas: dict[str, tuple[str, ...]]) -> str | None:
+def _form_notes(
+    word: str, lemma: str, lemmas: dict[str, tuple[str, ...]]
+) -> tuple[tuple[str, str], ...]:
     # Пометки со всех частей речи, где у слова та же лемма: books — и
     # «книги», и «бронирует»; read → read · read — и V2, и V3.
     notes = [
-        TAG_NOTES[tag]
+        (upos, TAG_NOTES[tag])
         for upos in NOTE_ORDER
         if lemma in lemmas.get(upos, ())
         for tag, forms in getAllInflections(lemma, upos=upos).items()
         if word in forms and tag in TAG_NOTES
     ]
-    return " / ".join(dict.fromkeys(notes)) or None
+    return tuple(dict.fromkeys(notes))
 
 
 def lemma_zipf(lemma: str) -> float:

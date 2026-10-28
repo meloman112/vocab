@@ -20,14 +20,18 @@ async def add_text(
     pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str
 ) -> list[dict[str, Any]]:
     entries = []
-    for lemma, form_note in await _items(pool, cfg, user_id, repo.normalize_word(text)):
+    text = repo.normalize_word(text)
+    for lemma, analysis in await _items(pool, cfg, user_id, text):
         word = await _ensure_word(pool, cfg, user_id, lemma)
+        # Пометка выбирается по части речи карточки, а не по слову вообще:
+        # bicycles у карточки bicycle (noun) — множественное число, без he/she/it.
+        note = analysis.note_for(word["pos"]) if analysis else None
         async with pool.acquire() as conn:
             created = await repo.add_card(conn, user_id, word["id"])
             count = await repo.learners(conn, word["id"])
         entries.append({
             **dict(word),
-            "form_note": form_note,
+            "form_note": f"{text} — {note}" if note else None,
             "created": created,
             "learners": count,
             "top": lexicon.rank_label(word["zipf"], word["level"]),
@@ -37,8 +41,8 @@ async def add_text(
 
 async def _items(
     pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str
-) -> list[tuple[str, str | None]]:
-    """Пары (лемма, пояснение формы). Предложение целиком не учим — только
+) -> list[tuple[str, lexicon.Analysis | None]]:
+    """Пары (лемма, разбор присланной формы). Предложение целиком не учим — только
     устойчивые фразы из него."""
     # Готовое слово или фраза из общего словаря берутся как есть: составители
     # учебных списков считают interesting и evening самостоятельными словами,
@@ -50,7 +54,7 @@ async def _items(
         if not lexicon.is_word(text):
             raise Rejected(f"Не знаю английского слова «{text}».")
         analysis = lexicon.analyze(text)
-        return [(analysis.lemma, analysis.form_note)]
+        return [(analysis.lemma, analysis)]
 
     await _spend_llm(pool, cfg, user_id)
     phrases = await enrich.find_phrases(cfg, text)

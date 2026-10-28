@@ -34,6 +34,26 @@ def test_plural_noun_is_not_only_a_verb_form():
     assert note.startswith("множественное число") and "he/she/it" in note
 
 
+@pytest.mark.parametrize(
+    ("word", "pos", "note"),
+    [
+        # Карточка bicycle — noun: про he/she/it студенту рядом с ней не говорим.
+        ("bicycles", "noun", "множественное число"),
+        ("books", "noun", "множественное число"),
+        ("works", "verb", "настоящее время для he/she/it"),
+        ("left", "verb", "прошедшее время (V2) / третья форма, причастие прошедшего времени (V3)"),
+    ],
+)
+def test_note_matches_card_part_of_speech(word, pos, note):
+    assert analyze(word).note_for(pos) == note
+
+
+def test_note_without_matching_part_of_speech_keeps_all_readings():
+    # Фраза или модальный глагол: выбрать не из чего, показываем всё.
+    assert analyze("bicycles").note_for("phrase") == analyze("bicycles").form_note
+    assert analyze("go").note_for("verb") is None
+
+
 def test_irregular_form_shared_by_v2_and_v3():
     assert "V2" in analyze("left").form_note and "V3" in analyze("left").form_note
 

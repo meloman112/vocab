@@ -41,7 +41,7 @@ class WordEntry(BaseModel):
     что касается именно этого запроса."""
 
     lemma: str
-    # «форма на -ing: Continuous или герундий» — если прислали не лемму.
+    # «reading — форма на -ing: Continuous или герундий» — если прислали не лемму.
     form_note: str | None
     translation: str
     ipa: str

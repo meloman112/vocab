@@ -34,7 +34,7 @@ def format_entry(entry: dict[str, Any]) -> str:
         head += " ⚠️ неправильное"
     lines = [head]
     if entry["form_note"]:
-        lines.append(f"ты прислал форму: {entry['form_note']}")
+        lines.append(f"🔤 {entry['form_note']}")
     if entry["forms"]:
         lines.append(entry["forms"])
     lines.append("")
