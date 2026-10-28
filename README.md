@@ -66,6 +66,20 @@ Telegram не откроет `https://DOMAIN/app/`.
 API_TOKEN=... SMOKE_BASE=https://DOMAIN make smoke
 ```
 
+### Боевой сервер
+
+Сейчас vocab живёт на `test_moe` в `~/vocab` — это git-клон, `.env` лежит
+только там. Публичный адрес даёт туннель Aral Cloud (контейнер
+`vocab_tunnel`, `aral tunnel http 8000`): `https://vocab-7e5999.tun.aralcloud.uz`,
+поэтому `BIND_ADDR=127.0.0.1`, а NetBird не нужен. Бот — @vocab_srs_bot.
+
+Выкатка — только через git, правки руками на сервере затрёт следующий pull:
+
+```sh
+git push origin main
+make deploy        # git pull --ff-only + docker compose up -d --build
+```
+
 ## Как это работает
 
 **Общий словарь и личные карточки.** `words` — одна строка на лемму:

@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
+DEPLOY_HOST ?= test_moe
 
 help: ## Список команд
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | expand -t22
@@ -35,4 +36,7 @@ env-check: ## Все ключи из .env.example есть в .env
 smoke: ## Проверить живой контур
 	@python3 scripts/smoke.py
 
-.PHONY: help up down logs ps psql front xpi test env-check smoke
+deploy: ## Выкатить запушенный main на сервер
+	ssh -T $(DEPLOY_HOST) 'cd ~/vocab && git pull --ff-only && docker compose up -d --build'
+
+.PHONY: help up down logs ps psql front xpi test env-check smoke deploy
