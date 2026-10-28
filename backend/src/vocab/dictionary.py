@@ -30,7 +30,7 @@ async def add_text(
             "form_note": form_note,
             "created": created,
             "learners": count,
-            "top": lexicon.rank_label(word["zipf"]),
+            "top": lexicon.rank_label(word["zipf"], word["level"]),
         })
     return entries
 
@@ -40,6 +40,12 @@ async def _items(
 ) -> list[tuple[str, str | None]]:
     """Пары (лемма, пояснение формы). Предложение целиком не учим — только
     устойчивые фразы из него."""
+    # Готовое слово или фраза из общего словаря берутся как есть: составители
+    # учебных списков считают interesting и evening самостоятельными словами,
+    # а lemminflect свёл бы их к interest и even.
+    async with pool.acquire() as conn:
+        if await repo.get_word(conn, text) is not None:
+            return [(text, None)]
     if " " not in text:
         if not lexicon.is_word(text):
             raise Rejected(f"Не знаю английского слова «{text}».")

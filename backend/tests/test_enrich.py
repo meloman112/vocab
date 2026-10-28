@@ -18,6 +18,7 @@ FULL = {
         {"en": "She has gone home.", "ru": "Она ушла домой."},
     ],
     "zipf": 6.4,
+    "level": "A1",
 }
 
 
@@ -35,6 +36,11 @@ def test_optional_fields_default():
     answer = {k: v for k, v in FULL.items() if k not in ("forms", "irregular", "zipf")}
     parsed = parse_word(json.dumps(answer))
     assert parsed["forms"] == "" and parsed["irregular"] is False and parsed["zipf"] == 0
+
+
+def test_unknown_level_is_dropped():
+    assert parse_word(json.dumps({**FULL, "level": "B1"}))["level"] == "B1"
+    assert parse_word(json.dumps({**FULL, "level": "intermediate"}))["level"] is None
 
 
 def test_zipf_is_clamped_to_scale():

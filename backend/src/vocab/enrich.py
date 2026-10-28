@@ -26,6 +26,7 @@ examples — массив из двух объектов {"en": ..., "ru": ...}:
 zipf — насколько часто это встречается в английском, по шкале Zipf с одним
   знаком после запятой: 7 — как "the", 6 — как "go", 5 — как "read",
   4 — как "reliable", 3 — как "redundant", 2 — совсем редко.
+level — уровень CEFR, на котором это обычно изучают: A1, A2, B1, B2, C1 или C2.
 
 Никаких пояснений и markdown вне JSON.
 """
@@ -41,6 +42,8 @@ PHRASES_PROMPT = """\
 
 Отвечай только JSON-объектом {"phrases": [...]}. Ничего не нашёл — пустой массив.
 """
+
+LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
 TIMEOUT = httpx.Timeout(20.0)
 ATTEMPTS = 2
@@ -76,6 +79,9 @@ def parse_word(content: str) -> dict[str, Any]:
         "irregular": data.get("irregular") is True,
         "examples": examples,
         "zipf": _zipf(data.get("zipf")),
+        # Уровень только упорядочивает выдачу: незнакомое значение — не повод
+        # терять перевод, слово просто уйдёт в конец.
+        "level": data.get("level") if data.get("level") in LEVELS else None,
     }
 
 

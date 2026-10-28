@@ -51,17 +51,32 @@ class Analysis:
 def analyze(word: str) -> Analysis:
     """went → go (V2), children → child (мн. ч.), go → go."""
     lemmas = getAllLemmas(word)
+    # Правила lemminflect порождают и редкие ложные леммы: number → numb
+    # («онемевший» в сравнительной степени), data → datum, overcome →
+    # over-come. Настоящая лемма не бывает намного реже своей формы; дефис
+    # проверяется отдельно — wordfreq считает over-come как over и come.
+    floor = zipf_frequency(word, "en") - 1
     for upos in UPOS_ORDER:
         for lemma in lemmas.get(upos, ()):
-            if lemma != word:
-                return Analysis(lemma, _form_note(word, lemma, upos))
+            if lemma == word or ("-" in lemma and "-" not in word):
+                continue
+            if zipf_frequency(lemma, "en") >= floor:
+                return Analysis(lemma, _form_note(word, lemma, lemmas))
     return Analysis(word, None)
 
 
-def _form_note(word: str, lemma: str, upos: str) -> str | None:
-    # read → read · read: одна форма бывает и V2, и V3, отсюда список.
+# Для пометок существительное первым: bicycles без контекста — скорее
+# «велосипеды», чем «он ездит на велосипеде».
+NOTE_ORDER = ("NOUN", "VERB", "ADJ", "ADV")
+
+
+def _form_note(word: str, lemma: str, lemmas: dict[str, tuple[str, ...]]) -> str | None:
+    # Пометки со всех частей речи, где у слова та же лемма: books — и
+    # «книги», и «бронирует»; read → read · read — и V2, и V3.
     notes = [
         TAG_NOTES[tag]
+        for upos in NOTE_ORDER
+        if lemma in lemmas.get(upos, ())
         for tag, forms in getAllInflections(lemma, upos=upos).items()
         if word in forms and tag in TAG_NOTES
     ]
@@ -73,9 +88,12 @@ def lemma_zipf(lemma: str) -> float:
 
     Одна только «go» дала бы 6.03, а с went, gone, going, goes — 6.41:
     без суммы слова с неправильными формами занижены.
+
+    Считаются только формы, которые сами сводятся к этой лемме: иначе numb
+    забрал бы частоту number, а being — частоту being от be.
     """
     forms = {lemma} | {f for by_tag in getAllInflections(lemma).values() for f in by_tag}
-    total = sum(word_frequency(form, "en") for form in forms)
+    total = sum(word_frequency(form, "en") for form in forms if analyze(form).lemma == lemma)
     # Zipf — log10 от числа употреблений на миллиард слов.
     return round(math.log10(total) + 9, 2) if total else 0.0
 
@@ -101,12 +119,11 @@ def rank(zipf: float) -> int:
     return len(zipfs) - bisect.bisect_right(zipfs, zipf) + 1
 
 
-def rank_label(zipf: float) -> str:
+def rank_label(zipf: float, level: str | None = None) -> str:
+    """«B1 · топ-2000»: уровень — насколько слово трудное, топ — насколько частое."""
     place = rank(zipf)
-    for top in TOP_STEPS:
-        if place <= top:
-            return f"топ-{top}"
-    return f"реже топ-{TOP_STEPS[-1]}"
+    top = next((f"топ-{top}" for top in TOP_STEPS if place <= top), f"реже топ-{TOP_STEPS[-1]}")
+    return f"{level} · {top}" if level else top
 
 
 def is_word(text: str) -> bool:

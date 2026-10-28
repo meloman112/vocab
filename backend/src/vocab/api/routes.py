@@ -47,7 +47,7 @@ async def add_word(
 
 def _cards_out(rows) -> schemas.QueueOut:
     return schemas.QueueOut(cards=[
-        schemas.CardOut(**dict(row), top=lexicon.rank_label(row["zipf"]))
+        schemas.CardOut(**dict(row), top=lexicon.rank_label(row["zipf"], row["level"]))
         for row in rows
     ])
 
@@ -139,7 +139,7 @@ async def top_words(
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.top_words(conn, user_id, min(limit, 100))
     return [
-        schemas.TopWord(**dict(row), top=lexicon.rank_label(row["zipf"]))
+        schemas.TopWord(**dict(row), top=lexicon.rank_label(row["zipf"], row["level"]))
         for row in rows
     ]
 

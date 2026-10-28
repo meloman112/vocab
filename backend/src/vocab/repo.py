@@ -9,13 +9,13 @@ import asyncpg
 # явный, чтобы select * не начал утекать в ответ API с новой колонкой.
 CARD_SELECT = """
     select c.id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
-           w.irregular, w.examples, w.zipf,
+           w.irregular, w.examples, w.zipf, w.level,
            (select count(*) from cards l where l.word_id = w.id) as learners,
            c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
     from cards c join words w on w.id = c.word_id
 """
 
-WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, banned"
+WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, level, banned"
 
 # 10 очков за каждое повторение, как в Duolingo — за урок.
 XP_PER_REVIEW = 10
@@ -87,12 +87,12 @@ async def save_word(
     # do update: двое прислали одно новое слово одновременно — оба ответа
     # модели годятся, побеждает последний, а ошибки ни у кого нет.
     return await conn.fetchrow(
-        f"insert into words (lemma, zipf, translation, ipa, pos, forms, irregular, examples)"
-        f" values ($1, $2, $3, $4, $5, $6, $7, $8)"
+        f"insert into words (lemma, zipf, translation, ipa, pos, forms, irregular, examples, level)"
+        f" values ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         f" on conflict (lemma) do update set"
         f"  translation = excluded.translation, ipa = excluded.ipa, pos = excluded.pos,"
         f"  forms = excluded.forms, irregular = excluded.irregular,"
-        f"  examples = excluded.examples"
+        f"  examples = excluded.examples, level = excluded.level"
         f" returning {WORD_COLUMNS}",
         lemma,
         zipf,
@@ -102,6 +102,7 @@ async def save_word(
         fields["forms"],
         fields["irregular"],
         fields["examples"],
+        fields["level"],
     )
 
 
@@ -111,7 +112,7 @@ async def top_words(
     """Рейтинг общего словаря — тот же порядок, что у выдачи новых слов."""
     return await conn.fetch(
         """
-        select w.lemma as word, w.translation, w.zipf,
+        select w.lemma as word, w.translation, w.zipf, w.level,
                count(c.id) as learners,
                bool_or(c.user_id = $1) is true as mine
         from words w left join cards c on c.word_id = w.id
@@ -159,8 +160,9 @@ async def discover(
     conn: asyncpg.Connection, user_id: int, limit: int
 ) -> list[asyncpg.Record]:
     """Берёт из общего словаря слова, которых у пользователя нет, и сразу
-    заводит на них карточки: сначала те, что учат больше людей, потом
-    самые частые в языке.
+    заводит на них карточки: сначала знаменательные, среди них — уровень
+    A1 раньше A2, внутри уровня — те, что учат больше людей, потом самые
+    частые в языке.
 
     Пока пользователей мало, популярность у всех одинаковая и порядок
     фактически задаёт частота.
@@ -171,7 +173,12 @@ async def discover(
         select $1, w.id from words w
         where not w.banned
           and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)
-        order by (select count(*) from cards c where c.word_id = w.id) desc,
+        -- Служебные слова в конец: the, of, you знает любой начинающий, и
+        -- первая же выдача из них отбила бы желание продолжать.
+        order by w.pos in ('determiner', 'preposition', 'pronoun', 'conjunction',
+                           'modal', 'interjection', 'numeral', 'article', 'particle'),
+                 w.level nulls last,
+                 (select count(*) from cards c where c.word_id = w.id) desc,
                  w.zipf desc, w.id
         limit $2
         on conflict do nothing
