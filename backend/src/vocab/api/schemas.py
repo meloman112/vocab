@@ -2,6 +2,7 @@
 колонка не должна автоматически утечь в ответ."""
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 class AddWord(BaseModel):
     # Не только слово: из фразы или предложения достаются устойчивые выражения.
     word: str = Field(min_length=1, max_length=300)
+    # Какое из значений леммы нужно: кнопка «ещё: to book — глагол».
+    pos: Literal["noun", "verb", "adjective", "adverb"] | None = None
 
 
 class Review(BaseModel):
@@ -36,6 +39,14 @@ class CardOut(BaseModel):
     due: datetime
 
 
+class OtherSense(BaseModel):
+    """Другая часть речи той же леммы. translation — None, если в словаре
+    её ещё нет: перевод появится, когда её выберут."""
+
+    pos: str
+    translation: str | None
+
+
 class WordEntry(BaseModel):
     """Ответ на присланное слово: содержимое из общего словаря плюс то,
     что касается именно этого запроса."""
@@ -54,6 +65,7 @@ class WordEntry(BaseModel):
     learners: int
     # Различие «добавили» и «уже было» нужно боту, чтобы ответить честно.
     created: bool
+    others: list[OtherSense]
 
 
 class AddWordOut(BaseModel):

@@ -34,7 +34,7 @@ async def add_word(
     """
     try:
         entries = await dictionary.add_text(
-            request.app.state.pool, settings(), user_id, body.word
+            request.app.state.pool, settings(), user_id, body.word, body.pos
         )
     except dictionary.Rejected as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc

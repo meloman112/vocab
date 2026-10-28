@@ -43,6 +43,7 @@ TOP_STEPS = (100, 500, 1000, 2000, 5000, 10000, 20000)
 
 # Часть речи карточки в общем словаре → метка lemminflect.
 POS_UPOS = {"noun": "NOUN", "verb": "VERB", "adjective": "ADJ", "adverb": "ADV"}
+UPOS_POS = {upos: pos for pos, upos in POS_UPOS.items()}
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,9 @@ class Analysis:
     lemma: str
     # Пары (часть речи, пометка). Пусто — прислана сама лемма, объяснять нечего.
     notes: tuple[tuple[str, str], ...] = ()
+    # Какими частями речи может быть присланная форма этой леммы, в порядке
+    # NOTE_ORDER: booked — только verb, books — noun и verb.
+    parts: tuple[str, ...] = ()
 
     @property
     def form_note(self) -> str | None:
@@ -69,6 +73,19 @@ class Analysis:
         return Analysis(self.lemma, same or self.notes).form_note
 
 
+def lemma_as(word: str, pos: str) -> str:
+    """Лемма формы в заданной части речи: the left — left, а не leave."""
+    candidates = getAllLemmas(word).get(POS_UPOS.get(pos, ""), ())
+    return candidates[0] if candidates else word
+
+
+def parts(word: str, lemma: str) -> tuple[str, ...]:
+    """Части речи, в которых word — форма lemma: parts("book", "book") —
+    noun и verb, parts("booked", "book") — только verb."""
+    lemmas = getAllLemmas(word)
+    return tuple(UPOS_POS[upos] for upos in NOTE_ORDER if lemma in lemmas.get(upos, ()))
+
+
 def analyze(word: str) -> Analysis:
     """went → go (V2), children → child (мн. ч.), go → go."""
     lemmas = getAllLemmas(word)
@@ -82,8 +99,8 @@ def analyze(word: str) -> Analysis:
             if lemma == word or ("-" in lemma and "-" not in word):
                 continue
             if zipf_frequency(lemma, "en") >= floor:
-                return Analysis(lemma, _form_notes(word, lemma, lemmas))
-    return Analysis(word)
+                return Analysis(lemma, _form_notes(word, lemma, lemmas), parts(word, lemma))
+    return Analysis(word, parts=parts(word, word))
 
 
 # Для пометок существительное первым: bicycles без контекста — скорее
@@ -100,10 +117,19 @@ def _form_notes(
         (upos, TAG_NOTES[tag])
         for upos in NOTE_ORDER
         if lemma in lemmas.get(upos, ())
-        for tag, forms in getAllInflections(lemma, upos=upos).items()
+        for tag, forms in _inflections(lemma, upos).items()
         if word in forms and tag in TAG_NOTES
     ]
     return tuple(dict.fromkeys(notes))
+
+
+def _inflections(lemma: str, upos: str) -> dict[str, tuple[str, ...]]:
+    inflections = dict(getAllInflections(lemma, upos=upos))
+    # У правильного глагола lemminflect отдаёт V3 только тогда, когда она
+    # отличается от V2: booked получило бы одно «V2», хотя это и V3.
+    if "VBD" in inflections and "VBN" not in inflections:
+        inflections["VBN"] = inflections["VBD"]
+    return inflections
 
 
 def lemma_zipf(lemma: str) -> float:

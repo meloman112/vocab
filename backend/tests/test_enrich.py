@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from vocab.enrich import parse_phrases, parse_word
+from vocab.enrich import _parse_as, parse_phrases, parse_word
 
 FULL = {
     "translation": "идти, ехать",
@@ -76,3 +76,10 @@ def test_non_json_raises():
 def test_phrases_are_normalized():
     answer = json.dumps({"phrases": ["Give  Up", "more and more", " "]})
     assert parse_phrases(answer) == ["give up", "more and more"]
+
+
+def test_requested_part_of_speech_is_enforced():
+    # Попросили to book, а модель ответила про «книгу» — такой ответ не годится.
+    assert _parse_as("verb")(json.dumps(FULL))["pos"] == "verb"
+    with pytest.raises(ValueError):
+        _parse_as("noun")(json.dumps(FULL))

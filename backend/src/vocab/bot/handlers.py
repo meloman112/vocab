@@ -7,7 +7,13 @@ import httpx
 from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandObject
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    WebAppInfo,
+)
 
 from ..client import VocabAPI
 from ..config import Settings
@@ -16,6 +22,16 @@ log = logging.getLogger(__name__)
 router = Router()
 
 MAX_TEXT_LEN = 300
+
+# Как назвать другое значение леммы на кнопке: «to book», «a book».
+POS_LABELS = {
+    "noun": ("a {}", "существительное"),
+    "verb": ("to {}", "глагол"),
+    "adjective": ("{}", "прилагательное"),
+    "adverb": ("{}", "наречие"),
+}
+# Telegram режет callback_data на 64 байтах.
+MAX_CALLBACK = 64
 
 
 def review_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
@@ -46,11 +62,33 @@ def format_entry(entry: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def senses_keyboard(entry: dict[str, Any]) -> InlineKeyboardMarkup | None:
+    """Кнопки других частей речи той же леммы: под «a book — книга»
+    предлагается «to book — бронировать»."""
+    rows = []
+    for other in entry["others"]:
+        data = f"sense:{other['pos']}:{entry['lemma']}"
+        if len(data.encode()) > MAX_CALLBACK:
+            continue
+        form, name = POS_LABELS.get(other["pos"], ("{}", other["pos"]))
+        meaning = other["translation"] or name
+        text = f"➕ {form.format(entry['lemma'])} — {meaning}"
+        rows.append([InlineKeyboardButton(text=text[:60], callback_data=data)])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+async def send_entries(message: Message, entries: list[dict[str, Any]]) -> None:
+    for entry in entries:
+        await message.answer(format_entry(entry), reply_markup=senses_keyboard(entry))
+
+
 @router.message(Command("start"))
 async def start(message: Message, cfg: Settings) -> None:
     await message.answer(
         "Пришли английское слово в любой форме — went, children, reading — "
         "отвечу переводом, формой и примерами и добавлю в повторение.\n"
+        "Слово бывает разными частями речи — уточни: to book (бронировать), "
+        "a book (книга).\n"
         "Пришлёшь фразу или предложение — достану из него устойчивые выражения.\n\n"
         "/review — повторение\n/stats — цифры и серия\n/top — что учат чаще всего\n"
         "/rating — рейтинг недели",
@@ -157,5 +195,22 @@ async def add_word(message: Message, api: VocabAPI) -> None:
         await message.answer(exc.response.json()["detail"])
         return
 
-    for entry in entries:
-        await message.answer(format_entry(entry))
+    await send_entries(message, entries)
+
+
+@router.callback_query(F.data.startswith("sense:"))
+async def add_sense(callback: CallbackQuery, api: VocabAPI) -> None:
+    """Кнопка «➕ to book»: то же добавление, но с выбранной частью речи."""
+    _, pos, lemma = callback.data.split(":", 2)
+    # Отвечаем сразу: новое значение ждёт ИИ дольше, чем Telegram ждёт ответа
+    # на нажатие, и у пользователя повисли бы часики на кнопке.
+    await callback.answer()
+    await callback.message.bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
+    try:
+        entries = await api.add_word(callback.from_user.id, lemma, pos)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code not in (422, 502):
+            raise
+        await callback.message.answer(exc.response.json()["detail"])
+        return
+    await send_entries(callback.message, entries)

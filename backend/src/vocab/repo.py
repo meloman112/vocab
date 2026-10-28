@@ -78,7 +78,17 @@ async def spend_llm(conn: asyncpg.Connection, user_id: int, tz: str) -> int:
 
 
 async def get_word(conn: asyncpg.Connection, lemma: str) -> asyncpg.Record | None:
-    return await conn.fetchrow(f"select {WORD_COLUMNS} from words where lemma = $1", lemma)
+    """Основное значение леммы: то, что попало в словарь первым."""
+    senses = await get_senses(conn, lemma)
+    return senses[0] if senses else None
+
+
+async def get_senses(conn: asyncpg.Connection, lemma: str) -> list[asyncpg.Record]:
+    """Все части речи леммы: book — noun «книга» и verb «бронировать».
+    Порядок по id: основное значение первым."""
+    return await conn.fetch(
+        f"select {WORD_COLUMNS} from words where lemma = $1 order by id", lemma
+    )
 
 
 async def save_word(
@@ -89,8 +99,8 @@ async def save_word(
     return await conn.fetchrow(
         f"insert into words (lemma, zipf, translation, ipa, pos, forms, irregular, examples, level)"
         f" values ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
-        f" on conflict (lemma) do update set"
-        f"  translation = excluded.translation, ipa = excluded.ipa, pos = excluded.pos,"
+        f" on conflict (lemma, pos) do update set"
+        f"  translation = excluded.translation, ipa = excluded.ipa,"
         f"  forms = excluded.forms, irregular = excluded.irregular,"
         f"  examples = excluded.examples, level = excluded.level"
         f" returning {WORD_COLUMNS}",
@@ -128,7 +138,9 @@ async def top_words(
 
 async def words_without_zipf(conn: asyncpg.Connection) -> list[str]:
     # Фразы без оценки здесь не исправить — их частоту знает только модель.
-    rows = await conn.fetch("select lemma from words where zipf = 0 and lemma not like '% %'")
+    rows = await conn.fetch(
+        "select distinct lemma from words where zipf = 0 and lemma not like '% %'"
+    )
     return [r["lemma"] for r in rows]
 
 
@@ -137,8 +149,10 @@ async def set_zipf(conn: asyncpg.Connection, lemma: str, zipf: float) -> None:
 
 
 async def ban_word(conn: asyncpg.Connection, lemma: str) -> bool:
+    # Все части речи леммы разом: у book их может быть две, и тогда тег
+    # «UPDATE 2» — тоже успех.
     tag = await conn.execute("update words set banned = true where lemma = $1", lemma)
-    return tag.endswith(" 1")
+    return tag != "UPDATE 0"
 
 
 async def learners(conn: asyncpg.Connection, word_id: int) -> int:

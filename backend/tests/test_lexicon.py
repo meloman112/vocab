@@ -54,6 +54,19 @@ def test_note_without_matching_part_of_speech_keeps_all_readings():
     assert analyze("go").note_for("verb") is None
 
 
+def test_regular_verb_form_is_both_v2_and_v3():
+    # lemminflect не отдаёт V3, когда она совпадает с V2.
+    assert "V2" in analyze("booked").form_note and "V3" in analyze("booked").form_note
+
+
+@pytest.mark.parametrize(
+    ("word", "parts"),
+    [("booked", ("verb",)), ("books", ("noun", "verb")), ("apples", ("noun",))],
+)
+def test_form_knows_its_parts_of_speech(word, parts):
+    assert analyze(word).parts == parts
+
+
 def test_irregular_form_shared_by_v2_and_v3():
     assert "V2" in analyze("left").form_note and "V3" in analyze("left").form_note
 

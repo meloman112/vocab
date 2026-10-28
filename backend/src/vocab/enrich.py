@@ -28,6 +28,10 @@ zipf — насколько часто это встречается в англ
   4 — как "reliable", 3 — как "redundant", 2 — совсем редко.
 level — уровень CEFR, на котором это обычно изучают: A1, A2, B1, B2, C1 или C2.
 
+Если указана часть речи, вся карточка — перевод, примеры, формы — должна быть
+в этой части речи, и pos в ответе — ровно она: «book, часть речи: verb» —
+бронировать, а не книга.
+
 Никаких пояснений и markdown вне JSON.
 """
 
@@ -135,8 +139,24 @@ async def _ask(cfg: Settings, system: str, user: str, parse):
     raise EnrichError(f"ИИ не ответил на {user!r}")
 
 
-async def fetch_word(cfg: Settings, lemma: str) -> dict[str, Any]:
-    return await _ask(cfg, WORD_PROMPT, lemma, parse_word)
+async def fetch_word(cfg: Settings, lemma: str, pos: str | None = None) -> dict[str, Any]:
+    """Карточка для леммы. С pos — именно в этой части речи: to book
+    «бронировать», а не основное «книга»."""
+    if pos is None:
+        return await _ask(cfg, WORD_PROMPT, lemma, parse_word)
+    return await _ask(cfg, WORD_PROMPT, f"{lemma}\nЧасть речи: {pos}", _parse_as(pos))
+
+
+def _parse_as(pos: str):
+    def parse(content: str) -> dict[str, Any]:
+        fields = parse_word(content)
+        # Модель иногда отвечает про основное значение вопреки просьбе. Такую
+        # карточку под этой частью речи сохранять нельзя: под verb лежала бы
+        # «книга», поэтому ответ считается кривым и уходит на повтор.
+        if fields["pos"] != pos:
+            raise ValueError(f"просили {pos}, модель ответила {fields['pos']}")
+        return fields
+    return parse
 
 
 async def find_phrases(cfg: Settings, text: str) -> list[str]:

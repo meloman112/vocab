@@ -36,8 +36,10 @@ class VocabAPI:
             return None
         return response.json()
 
-    async def add_word(self, tg_id: int, word: str) -> list[dict[str, Any]]:
-        body = await self._call("POST", "/words", tg_id, json={"word": word})
+    async def add_word(
+        self, tg_id: int, word: str, pos: str | None = None
+    ) -> list[dict[str, Any]]:
+        body = await self._call("POST", "/words", tg_id, json={"word": word, "pos": pos})
         return body["entries"]
 
     async def stats(self, tg_id: int) -> dict[str, Any]:
