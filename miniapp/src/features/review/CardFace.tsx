@@ -3,6 +3,19 @@ import { Fragment } from 'react';
 
 import type { Card } from '../../api/types';
 
+// «to book» и «a book» — разные карточки. На лицевой стороне без подсказки
+// не понять, какую из них спрашивают. Артикль не ставим: «a water» хуже,
+// чем подпись «существительное».
+const POS_HINTS: Record<string, string> = {
+  noun: 'существительное',
+  adjective: 'прилагательное',
+  adverb: 'наречие',
+};
+
+function title(card: Card): string {
+  return card.homonym && card.pos === 'verb' ? `to ${card.word}` : card.word;
+}
+
 interface Props {
   card: Card;
   flipped: boolean;
@@ -20,8 +33,12 @@ export function CardFace({ card, flipped, onFlip }: Props) {
       interactiveAnimation="opacity"
     >
       <LargeTitle weight="1" className="card__word">
-        {card.word}
+        {title(card)}
       </LargeTitle>
+
+      {card.homonym && POS_HINTS[card.pos] && (
+        <Caption className="card__ipa">{POS_HINTS[card.pos]}</Caption>
+      )}
 
       {card.ipa && <Caption className="card__ipa">/{card.ipa}/</Caption>}
 

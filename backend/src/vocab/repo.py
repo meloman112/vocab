@@ -11,6 +11,7 @@ CARD_SELECT = """
     select c.id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
            w.irregular, w.examples, w.zipf, w.level,
            (select count(*) from cards l where l.word_id = w.id) as learners,
+           exists (select 1 from words o where o.lemma = w.lemma and o.id <> w.id) as homonym,
            c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
     from cards c join words w on w.id = c.word_id
 """

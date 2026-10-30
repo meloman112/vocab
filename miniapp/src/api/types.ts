@@ -17,6 +17,8 @@ export interface Card {
   top: string;
   /** Сколько человек учат слово. */
   learners: number;
+  /** У леммы есть другие части речи (a book / to book). */
+  homonym: boolean;
   due: string;
 }
 
