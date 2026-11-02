@@ -26,6 +26,14 @@ class Rejected(Exception):
     """Текст не принят. Сообщение уходит пользователю как есть."""
 
 
+class Misspelled(Rejected):
+    """Похоже на опечатку. Клиент предлагает исправление и «добавить как есть»."""
+
+    def __init__(self, word: str, suggestion: str) -> None:
+        super().__init__(f"Слова «{word}» нет в словаре. Может, {suggestion}?")
+        self.suggestion = suggestion
+
+
 @dataclass(frozen=True)
 class Item:
     """Что добавить: лемма и, если известно, какая из её частей речи."""
@@ -43,12 +51,18 @@ class Item:
 
 
 async def add_text(
-    pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str, pos: str | None = None
+    pool: asyncpg.Pool,
+    cfg: Settings,
+    user_id: int,
+    text: str,
+    pos: str | None = None,
+    as_is: bool = False,
 ) -> list[dict[str, Any]]:
-    """pos — когда пользователь выбрал значение кнопкой «ещё: to book»."""
+    """pos — когда пользователь выбрал значение кнопкой «ещё: to book»;
+    as_is — нажал «добавить как есть» под подсказкой опечатки."""
     entries = []
     text = repo.normalize_word(text)
-    for item in await _items(pool, cfg, user_id, text, pos):
+    for item in await _items(pool, cfg, user_id, text, pos, as_is):
         word = await _ensure_word(pool, cfg, user_id, item)
         # Пометка выбирается по части речи карточки, а не по слову вообще:
         # bicycles у карточки bicycle (noun) — множественное число, без he/she/it.
@@ -84,7 +98,7 @@ def _others(
 
 
 async def _items(
-    pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str, pos: str | None
+    pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str, pos: str | None, as_is: bool
 ) -> list[Item]:
     """Что добавить. Предложение целиком не учим — только устойчивые фразы из него."""
     if pos is not None:
@@ -105,6 +119,9 @@ async def _items(
     if " " not in text:
         if not lexicon.is_word(text):
             raise Rejected(f"Не знаю английского слова «{text}».")
+        suggestion = None if as_is else lexicon.suggest(text)
+        if suggestion:
+            raise Misspelled(text, suggestion)
         analysis = lexicon.analyze(text)
         only = analysis.parts[0] if len(analysis.parts) == 1 else None
         # Форма говорит о части речи, только если это не сама лемма: booked —

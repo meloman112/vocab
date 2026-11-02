@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 /**
  * Тонкая типизированная обёртка над window.Telegram.WebApp.
  *
@@ -14,8 +16,16 @@ interface HapticFeedback {
   notificationOccurred(type: NotificationType): void;
 }
 
+interface BackButton {
+  show(): void;
+  hide(): void;
+  onClick(callback: () => void): void;
+  offClick(callback: () => void): void;
+}
+
 interface TelegramWebApp {
   initData: string;
+  BackButton: BackButton;
   colorScheme: 'light' | 'dark';
   platform: string;
   HapticFeedback: HapticFeedback;
@@ -51,4 +61,18 @@ export function impact(style: ImpactStyle): void {
 
 export function notify(type: NotificationType): void {
   webApp?.HapticFeedback.notificationOccurred(type);
+}
+
+/** Системная «Назад» в шапке Telegram. Без обработчика кнопка скрыта. */
+export function useBackButton(onBack: (() => void) | null): void {
+  useEffect(() => {
+    const button = webApp?.BackButton;
+    if (!button || !onBack) return;
+    button.show();
+    button.onClick(onBack);
+    return () => {
+      button.offClick(onBack);
+      button.hide();
+    };
+  }, [onBack]);
 }

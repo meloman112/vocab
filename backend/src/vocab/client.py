@@ -37,10 +37,22 @@ class VocabAPI:
         return response.json()
 
     async def add_word(
-        self, tg_id: int, word: str, pos: str | None = None
+        self, tg_id: int, word: str, pos: str | None = None, as_is: bool = False
     ) -> list[dict[str, Any]]:
-        body = await self._call("POST", "/words", tg_id, json={"word": word, "pos": pos})
+        body = await self._call(
+            "POST", "/words", tg_id, json={"word": word, "pos": pos, "as_is": as_is}
+        )
         return body["entries"]
+
+    async def quiz(self, tg_id: int, limit: int) -> list[dict[str, Any]]:
+        body = await self._call("GET", "/quiz", tg_id, params={"limit": limit})
+        return body["cards"]
+
+    async def review(self, tg_id: int, card_id: int, rating: int) -> None:
+        await self._call("POST", "/review", tg_id, json={"card_id": card_id, "rating": rating})
+
+    async def report(self, tg_id: int, word_id: int, reason: str) -> None:
+        await self._call("POST", "/reports", tg_id, json={"word_id": word_id, "reason": reason})
 
     async def stats(self, tg_id: int) -> dict[str, Any]:
         return await self._call("GET", "/stats", tg_id)

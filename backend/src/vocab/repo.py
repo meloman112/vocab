@@ -8,7 +8,7 @@ import asyncpg
 # Карточка = личное расписание + общее содержимое слова. Список колонок
 # явный, чтобы select * не начал утекать в ответ API с новой колонкой.
 CARD_SELECT = """
-    select c.id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
+    select c.id, w.id as word_id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
            w.irregular, w.examples, w.zipf, w.level,
            (select count(*) from cards l where l.word_id = w.id) as learners,
            exists (select 1 from words o where o.lemma = w.lemma and o.id <> w.id) as homonym,
@@ -153,6 +153,11 @@ async def ban_word(conn: asyncpg.Connection, lemma: str) -> bool:
     # Все части речи леммы разом: у book их может быть две, и тогда тег
     # «UPDATE 2» — тоже успех.
     tag = await conn.execute("update words set banned = true where lemma = $1", lemma)
+    await conn.execute(
+        "update reports set resolved_at = now() where resolved_at is null"
+        " and word_id in (select id from words where lemma = $1)",
+        lemma,
+    )
     return tag != "UPDATE 0"
 
 
@@ -400,4 +405,129 @@ async def weak_cards(
         " order by lapses desc, w.lemma limit $2",
         user_id,
         limit,
+    )
+
+
+# Для тестов годятся только слова, которые уже видели: угадывать перевод
+# слова, которого не знаешь, — не проверка, а лотерея. Исключение —
+# неправильные глаголы: формы учат таблицей, их можно спрашивать сразу.
+QUIZ_FILTERS = {
+    "any": "c.last_review is not null",
+    "irregular": "w.irregular and w.pos = 'verb' and w.forms like '% · % · %'",
+}
+
+
+async def quiz_cards(
+    conn: asyncpg.Connection, user_id: int, mode: str, limit: int
+) -> list[asyncpg.Record]:
+    """Сначала то, что пора повторять, потом то, что подойдёт раньше всего:
+    тест засчитывается как повторение, и раньше срока FSRS это учитывает."""
+    return await conn.fetch(
+        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and {QUIZ_FILTERS[mode]}"
+        f" order by c.due limit $2",
+        user_id,
+        limit,
+    )
+
+
+async def distractors(conn: asyncpg.Connection, limit: int) -> list[asyncpg.Record]:
+    """Случайные слова общего словаря — неправильные варианты ответа. Свои
+    слова не исключаются: путать знакомые между собой — лучшая проверка,
+    а сам ответ quiz.choices отсеивает."""
+    return await conn.fetch(
+        "select lemma, translation, pos from words where not banned order by random() limit $1",
+        limit,
+    )
+
+
+async def report(
+    conn: asyncpg.Connection, user_id: int, word_id: int, reason: str, comment: str | None
+) -> bool:
+    """Жалоба на слово. False — такого слова нет."""
+    if not await conn.fetchval("select exists (select 1 from words where id = $1)", word_id):
+        return False
+    await conn.execute(
+        "insert into reports (word_id, user_id, reason, comment) values ($1, $2, $3, $4)"
+        " on conflict (word_id, user_id) where resolved_at is null"
+        " do update set reason = excluded.reason, comment = excluded.comment,"
+        "  created_at = now()",
+        word_id,
+        user_id,
+        reason,
+        comment,
+    )
+    return True
+
+
+async def open_reports(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+    """Слова с открытыми жалобами: самые обсуждаемые первыми."""
+    return await conn.fetch(
+        f"""
+        select {", ".join("w." + c for c in WORD_COLUMNS.split(", "))},
+               count(*) as reports,
+               array_agg(distinct r.reason) as reasons,
+               array_remove(array_agg(r.comment order by r.created_at desc), null) as comments,
+               max(r.created_at) as last_at
+        from reports r join words w on w.id = r.word_id
+        where r.resolved_at is null
+        group by w.id
+        order by reports desc, last_at desc
+        """
+    )
+
+
+async def resolve_reports(conn: asyncpg.Connection, word_id: int) -> None:
+    await conn.execute(
+        "update reports set resolved_at = now() where word_id = $1 and resolved_at is null",
+        word_id,
+    )
+
+
+async def admin_words(conn: asyncpg.Connection, query: str, limit: int) -> list[asyncpg.Record]:
+    """Поиск по всему словарю, вместе с заблокированными. Совпадение
+    с начала слова выше, чем в середине."""
+    return await conn.fetch(
+        f"select {WORD_COLUMNS} from words where lemma like $1"
+        f" order by lemma not like $2, lemma, id limit $3",
+        f"%{query}%",
+        f"{query}%",
+        limit,
+    )
+
+
+async def update_word(
+    conn: asyncpg.Connection, word_id: int, fields: dict[str, Any]
+) -> asyncpg.Record | None:
+    """Правка слова админом. Любое решение по слову закрывает жалобы на него:
+    и исправление, и блокировка — это ответ на них."""
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            f"update words set translation = $2, ipa = $3, forms = $4, irregular = $5,"
+            f" examples = $6, level = $7, banned = $8 where id = $1"
+            f" returning {WORD_COLUMNS}",
+            word_id,
+            fields["translation"],
+            fields["ipa"],
+            fields["forms"],
+            fields["irregular"],
+            fields["examples"],
+            fields["level"],
+            fields["banned"],
+        )
+        if row is not None:
+            await resolve_reports(conn, word_id)
+    return row
+
+
+async def admin_summary(conn: asyncpg.Connection) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """
+        select
+          (select count(*) from users)                                  as users,
+          (select count(distinct c.user_id) from reviews r join cards c on c.id = r.card_id
+            where r.reviewed_at > now() - interval '7 days')            as active_week,
+          (select count(*) from words where not banned)                 as words,
+          (select count(*) from words where banned)                     as banned,
+          (select count(distinct word_id) from reports where resolved_at is null) as open_reports
+        """
     )

@@ -22,6 +22,10 @@ export default defineConfig({
       '/words': 'http://localhost:8000',
       '/discover': 'http://localhost:8000',
       '/leaderboard': 'http://localhost:8000',
+      '/quiz': 'http://localhost:8000',
+      '/reports': 'http://localhost:8000',
+      '/me': 'http://localhost:8000',
+      '/admin': 'http://localhost:8000',
     },
   },
 });

@@ -1,10 +1,11 @@
 """Хендлеры бота. Логики нет: всё через API, бот — просто ещё один клиент."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
@@ -12,6 +13,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    PollAnswer,
     WebAppInfo,
 )
 
@@ -62,9 +64,9 @@ def format_entry(entry: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def senses_keyboard(entry: dict[str, Any]) -> InlineKeyboardMarkup | None:
-    """Кнопки других частей речи той же леммы: под «a book — книга»
-    предлагается «to book — бронировать»."""
+def entry_keyboard(entry: dict[str, Any]) -> InlineKeyboardMarkup:
+    """Кнопки других частей речи той же леммы (под «a book — книга»
+    предлагается «to book — бронировать») и жалоба на слово."""
     rows = []
     for other in entry["others"]:
         data = f"sense:{other['pos']}:{entry['lemma']}"
@@ -73,13 +75,52 @@ def senses_keyboard(entry: dict[str, Any]) -> InlineKeyboardMarkup | None:
         form, name = POS_LABELS.get(other["pos"], ("{}", other["pos"]))
         meaning = other["translation"] or name
         text = f"➕ {form.format(entry['lemma'])} — {meaning}"
-        rows.append([InlineKeyboardButton(text=text[:60], callback_data=data)])
-    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        rows.append(_callback(text, data))
+    rows.append(_callback("⚠️ Ошибка в слове", f"report:{entry['id']}"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+REPORT_REASONS = {
+    "typo": "Опечатка, нет такого слова",
+    "translation": "Неверный перевод",
+    "example": "Плохой пример",
+}
 
 
 async def send_entries(message: Message, entries: list[dict[str, Any]]) -> None:
     for entry in entries:
-        await message.answer(format_entry(entry), reply_markup=senses_keyboard(entry))
+        await message.answer(format_entry(entry), reply_markup=entry_keyboard(entry))
+
+
+def _callback(text: str, data: str) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text=text[:60], callback_data=data)]
+
+
+async def add_and_reply(
+    message: Message, tg_id: int, api: VocabAPI, text: str,
+    pos: str | None = None, as_is: bool = False,
+) -> None:
+    """Добавление и ответ. Отказ API превращается в текст для человека,
+    опечатка — ещё и в кнопки «help» / «добавить как есть»."""
+    # Новое слово ждёт ответа ИИ несколько секунд — пусть видно, что бот жив.
+    await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    try:
+        entries = await api.add_word(tg_id, text, pos, as_is)
+    except httpx.HTTPStatusError as exc:
+        # 422 и 502 несут текст для человека; всё остальное — настоящая
+        # ошибка, и пусть падает в лог aiogram.
+        if exc.response.status_code not in (422, 502):
+            raise
+        detail = exc.response.json()["detail"]
+        if isinstance(detail, str):
+            await message.answer(detail)
+            return
+        rows = [_callback(f"➕ {detail['suggestion']}", f"add:{detail['suggestion']}")]
+        if len(f"asis:{text}".encode()) <= MAX_CALLBACK:
+            rows.append(_callback(f"Нет, именно «{text}»", f"asis:{text}"))
+        await message.answer(detail["message"], reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        return
+    await send_entries(message, entries)
 
 
 @router.message(Command("start"))
@@ -90,7 +131,7 @@ async def start(message: Message, cfg: Settings) -> None:
         "Слово бывает разными частями речи — уточни: to book (бронировать), "
         "a book (книга).\n"
         "Пришлёшь фразу или предложение — достану из него устойчивые выражения.\n\n"
-        "/review — повторение\n/stats — цифры и серия\n/top — что учат чаще всего\n"
+        "/review — повторение и тесты\n/quiz — тест прямо в чате\n/stats — цифры и серия\n/top — что учат чаще всего\n"
         "/rating — рейтинг недели",
         reply_markup=review_keyboard(cfg),
     )
@@ -171,6 +212,86 @@ async def ban(message: Message, command: CommandObject, api: VocabAPI, cfg: Sett
     await message.answer(f"«{command.args}» убрано из словаря")
 
 
+@router.message(Command("quiz"))
+async def quiz(message: Message, api: VocabAPI, cfg: Settings) -> None:
+    """Тест в самом чате: quiz-опросы Telegram, ответ сразу идёт в FSRS."""
+    cards = await api.quiz(message.from_user.id, QUIZ_SIZE)
+    cards = [c for c in cards if len(c["choices_ru"]) >= 2]
+    if not cards:
+        await message.answer(
+            "Тестировать пока нечего: сначала пройди новые слова карточками.",
+            reply_markup=review_keyboard(cfg),
+        )
+        return
+    quizzes[message.from_user.id] = Quiz(message.chat.id, cards)
+    await send_question(message.bot, message.from_user.id)
+
+
+@router.poll_answer()
+async def quiz_answer(answer: PollAnswer, bot: Bot, api: VocabAPI) -> None:
+    asked = polls.pop(answer.poll_id, None)
+    # Опрос из прошлого запуска бота: его карточка уже неизвестна.
+    if asked is None:
+        return
+    tg_id, card_id, correct = asked
+    right = answer.option_ids == [correct]
+    await api.review(tg_id, card_id, RIGHT if right else WRONG)
+    session = quizzes.get(tg_id)
+    if session is None:
+        return
+    session.right += right
+    session.index += 1
+    await send_question(bot, tg_id)
+
+
+# Сколько вопросов в одном /quiz и какие оценки FSRS ставит ответ.
+QUIZ_SIZE = 10
+RIGHT, WRONG = 3, 1
+# Лимиты Telegram на опрос.
+POLL_QUESTION, POLL_OPTION, POLL_EXPLANATION = 300, 100, 200
+
+
+@dataclass
+class Quiz:
+    chat_id: int
+    cards: list[dict[str, Any]]
+    index: int = 0
+    right: int = 0
+
+
+# Состояние тестов в памяти процесса: перезапуск бота теряет только
+# недоотвеченный опрос, а оценки уже отвеченных лежат в API.
+quizzes: dict[int, Quiz] = {}
+# poll_id → (tg_id, card_id, номер правильного варианта).
+polls: dict[str, tuple[int, int, int]] = {}
+
+
+async def send_question(bot: Bot, tg_id: int) -> None:
+    session = quizzes[tg_id]
+    if session.index >= len(session.cards):
+        del quizzes[tg_id]
+        await bot.send_message(
+            session.chat_id,
+            f"Готово: {session.right} из {len(session.cards)}. /quiz — ещё",
+        )
+        return
+    card = session.cards[session.index]
+    title = f"to {card['word']}" if card["homonym"] and card["pos"] == "verb" else card["word"]
+    options = [option[:POLL_OPTION] for option in card["choices_ru"]]
+    example = card["examples"][0]
+    correct = card["choices_ru"].index(card["translation"])
+    sent = await bot.send_poll(
+        session.chat_id,
+        question=f"{session.index + 1}/{len(session.cards)}. {title} — как переводится?"[:POLL_QUESTION],
+        options=options,
+        type="quiz",
+        correct_option_id=correct,
+        is_anonymous=False,
+        explanation=f"{example['en']} — {example['ru']}"[:POLL_EXPLANATION],
+    )
+    polls[sent.poll.id] = (tg_id, card["id"], correct)
+
+
 @router.message(F.text)
 async def add_word(message: Message, api: VocabAPI) -> None:
     """Любое текстовое сообщение — слово или фраза на добавление.
@@ -182,20 +303,7 @@ async def add_word(message: Message, api: VocabAPI) -> None:
     if len(text) > MAX_TEXT_LEN:
         await message.answer("Слишком длинно. Пришли слово, фразу или одно предложение.")
         return
-
-    # Новое слово ждёт ответа ИИ несколько секунд — пусть видно, что бот жив.
-    await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-    try:
-        entries = await api.add_word(message.from_user.id, text)
-    except httpx.HTTPStatusError as exc:
-        # 422 и 502 несут текст для человека; всё остальное — настоящая
-        # ошибка, и пусть падает в лог aiogram.
-        if exc.response.status_code not in (422, 502):
-            raise
-        await message.answer(exc.response.json()["detail"])
-        return
-
-    await send_entries(message, entries)
+    await add_and_reply(message, message.from_user.id, api, text)
 
 
 @router.callback_query(F.data.startswith("sense:"))
@@ -205,12 +313,34 @@ async def add_sense(callback: CallbackQuery, api: VocabAPI) -> None:
     # Отвечаем сразу: новое значение ждёт ИИ дольше, чем Telegram ждёт ответа
     # на нажатие, и у пользователя повисли бы часики на кнопке.
     await callback.answer()
-    await callback.message.bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
-    try:
-        entries = await api.add_word(callback.from_user.id, lemma, pos)
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code not in (422, 502):
-            raise
-        await callback.message.answer(exc.response.json()["detail"])
-        return
-    await send_entries(callback.message, entries)
+    await add_and_reply(callback.message, callback.from_user.id, api, lemma, pos)
+
+
+@router.callback_query(F.data.startswith("add:"))
+async def add_suggestion(callback: CallbackQuery, api: VocabAPI) -> None:
+    """«➕ help» под «Слова helf нет. Может, help?»."""
+    await callback.answer()
+    await add_and_reply(callback.message, callback.from_user.id, api, callback.data[4:])
+
+
+@router.callback_query(F.data.startswith("asis:"))
+async def add_as_is(callback: CallbackQuery, api: VocabAPI) -> None:
+    await callback.answer()
+    await add_and_reply(callback.message, callback.from_user.id, api, callback.data[5:], as_is=True)
+
+
+@router.callback_query(F.data.startswith("report:"))
+async def report_menu(callback: CallbackQuery) -> None:
+    """«⚠️ Ошибка в слове» → что именно не так."""
+    word_id = callback.data.split(":", 1)[1]
+    rows = [_callback(text, f"rep:{reason}:{word_id}") for reason, text in REPORT_REASONS.items()]
+    await callback.answer()
+    await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("rep:"))
+async def report(callback: CallbackQuery, api: VocabAPI) -> None:
+    _, reason, word_id = callback.data.split(":", 2)
+    await api.report(callback.from_user.id, int(word_id), reason)
+    await callback.answer("Спасибо! Передал админу.")
+    await callback.message.edit_reply_markup(reply_markup=None)

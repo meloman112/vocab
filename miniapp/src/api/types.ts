@@ -5,6 +5,8 @@ export interface Example {
 
 export interface Card {
   id: number;
+  /** Слово общего словаря: жалоба идёт на него, а не на карточку. */
+  word_id: number;
   word: string;
   translation: string;
   ipa: string;
@@ -52,4 +54,68 @@ export interface ReviewResult {
   card_id: number;
   due: string;
   state: number;
+}
+
+export interface Cloze {
+  /** «She _____ home.» */
+  text: string;
+  /** Форма из предложения (went), а не лемма. */
+  answer: string;
+  ru: string;
+}
+
+/** Карточка для теста: варианты собирает сервер, правильный среди них. */
+export interface QuizCard extends Card {
+  choices_ru: string[];
+  choices_en: string[];
+  cloze: Cloze | null;
+}
+
+/** Откуда сервер берёт карточки теста. */
+export type QuizSource = 'any' | 'irregular' | 'cloze';
+
+export type ReportReason = 'typo' | 'translation' | 'example' | 'other';
+
+export const REPORT_REASONS: Record<ReportReason, string> = {
+  typo: 'Опечатка, нет такого слова',
+  translation: 'Неверный перевод',
+  example: 'Плохой пример',
+  other: 'Другое',
+};
+
+export interface Me {
+  is_admin: boolean;
+}
+
+export type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
+export interface AdminWord {
+  id: number;
+  lemma: string;
+  translation: string;
+  ipa: string;
+  pos: string;
+  forms: string;
+  irregular: boolean;
+  examples: Example[];
+  level: Level | null;
+  banned: boolean;
+}
+
+export interface ReportedWord extends AdminWord {
+  reports: number;
+  reasons: ReportReason[];
+  comments: string[];
+  last_at: string;
+}
+
+/** Что админ может поменять: лемма и часть речи — ключ слова. */
+export type WordEdit = Omit<AdminWord, 'id' | 'lemma' | 'pos'>;
+
+export interface AdminSummary {
+  users: number;
+  active_week: number;
+  words: number;
+  banned: number;
+  open_reports: number;
 }

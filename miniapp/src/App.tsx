@@ -1,108 +1,55 @@
-import { AppRoot, Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
-import { useState } from 'react';
+import { AppRoot } from '@telegram-apps/telegram-ui';
+import { useCallback, useState } from 'react';
 
+import { AdminScreen } from './features/admin/AdminScreen';
+import { HomeScreen } from './features/home/HomeScreen';
 import { LeaderboardScreen } from './features/leaderboard/LeaderboardScreen';
-import { useReviewSession } from './features/review/useReviewSession';
-import { ReviewScreen } from './features/review/ReviewScreen';
-import { SessionSummary } from './features/review/SessionSummary';
-import { appearance, platform } from './lib/telegram';
+import { modeById, type ModeId } from './features/quiz/modes';
+import { QuizFlow } from './features/quiz/QuizFlow';
+import { CardsFlow } from './features/review/CardsFlow';
+import { appearance, platform, useBackButton } from './lib/telegram';
+
+type Screen = { name: 'home' } | { name: 'cards' } | { name: 'quiz'; mode: ModeId } | { name: 'admin' };
 
 export function App() {
-  const { state, flip, rate, reload, learnNew, settled } = useReviewSession();
-  // Рейтинг открывается поверх сессии, а не вместо неё: «Назад» возвращает
-  // на тот же экран, а не перезагружает очередь.
+  const [screen, setScreen] = useState<Screen>({ name: 'home' });
+  // Рейтинг открывается поверх экрана, а не вместо него: сессия под ним
+  // остаётся смонтированной, и «Назад» возвращает в то же место.
   const [showBoard, setShowBoard] = useState(false);
 
-  const boardButton = (
-    <Button size="l" mode="plain" onClick={() => setShowBoard(true)}>
-      🏆 Рейтинг недели
-    </Button>
-  );
+  const home = useCallback(() => setScreen({ name: 'home' }), []);
+  const cards = useCallback(() => setScreen({ name: 'cards' }), []);
+  const openBoard = useCallback(() => setShowBoard(true), []);
+  const closeBoard = useCallback(() => setShowBoard(false), []);
+
+  // Админка ведёт «Назад» сама: из редактора слова — в список, а не в меню.
+  const ownBack = screen.name === 'home' || screen.name === 'admin';
+  useBackButton(showBoard ? closeBoard : ownBack ? null : home);
 
   return (
     <AppRoot appearance={appearance} platform={platform}>
-      {showBoard ? <LeaderboardScreen onBack={() => setShowBoard(false)} /> : render()}
+      <div hidden={showBoard}>{render()}</div>
+      {showBoard && <LeaderboardScreen onBack={closeBoard} />}
     </AppRoot>
   );
 
   function render() {
-    switch (state.phase) {
-      case 'loading':
+    switch (screen.name) {
+      case 'home':
         return (
-          <div className="screen screen--center">
-            <Spinner size="l" />
-          </div>
-        );
-
-      case 'error':
-        return (
-          <Placeholder
-            header="Не открылось"
-            description={state.error}
-            className="screen"
-            action={
-              <Button size="l" onClick={reload}>
-                Повторить
-              </Button>
-            }
+          <HomeScreen
+            onCards={cards}
+            onQuiz={(mode) => setScreen({ name: 'quiz', mode })}
+            onLeaderboard={openBoard}
+            onAdmin={() => setScreen({ name: 'admin' })}
           />
         );
-
-      case 'empty':
-        return (
-          <Placeholder
-            header="Свои слова на сегодня всё"
-            description="Взять новые из общего словаря? Сначала те, что учат чаще всего."
-            className="screen"
-            action={
-              <div className="actions">
-                <Button size="l" mode="filled" onClick={learnNew}>
-                  Давай
-                </Button>
-                {boardButton}
-              </div>
-            }
-          />
-        );
-
-      case 'exhausted':
-        return (
-          <Placeholder
-            header="Новых слов нет"
-            description="Ты разобрал весь общий словарь. Пришли боту своё слово."
-            className="screen"
-            action={boardButton}
-          />
-        );
-
-      case 'review': {
-        const card = state.cards[state.index];
-        // Индекс за пределами массива недостижим: reducer переводит
-        // сессию в 'done' в тот же переход, что и увеличивает индекс.
-        if (!card) return null;
-        return (
-          <ReviewScreen
-            card={card}
-            index={state.index}
-            total={state.cards.length}
-            flipped={state.flipped}
-            onFlip={flip}
-            onRate={rate}
-          />
-        );
-      }
-
-      case 'done':
-        return (
-          <SessionSummary
-            done={state.cards.length}
-            lapses={state.lapses}
-            syncErrors={state.syncErrors}
-            settled={settled}
-            onRestart={reload}
-            onLeaderboard={() => setShowBoard(true)}
-          />
-        );
+      case 'cards':
+        return <CardsFlow onLeaderboard={openBoard} />;
+      case 'quiz':
+        return <QuizFlow key={screen.mode} mode={modeById(screen.mode)} onCards={cards} onLeaderboard={openBoard} />;
+      case 'admin':
+        return <AdminScreen onExit={home} />;
     }
   }
 }

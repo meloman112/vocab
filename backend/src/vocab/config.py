@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     bot_token: str
     api_token: str
     owner_tg_id: int
+    # Кроме владельца, через запятую: кто ещё разбирает жалобы и правит словарь.
+    admin_tg_ids: str = ""
 
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
@@ -46,6 +48,10 @@ class Settings(BaseSettings):
         # Telegram открывает мини-апп только по HTTPS, поэтому схема жёстко
         # зашита: http сюда попадёт разве что опечаткой в DOMAIN.
         return f"https://{self.domain}/app/"
+
+    def is_admin(self, tg_id: int) -> bool:
+        admins = {int(a) for a in self.admin_tg_ids.split(",") if a.strip()}
+        return tg_id == self.owner_tg_id or tg_id in admins
 
     @property
     def reminder_hour_list(self) -> list[int]:

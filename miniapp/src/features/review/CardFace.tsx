@@ -2,19 +2,9 @@ import { Caption, LargeTitle, Text, Tappable } from '@telegram-apps/telegram-ui'
 import { Fragment } from 'react';
 
 import type { Card } from '../../api/types';
-
-// «to book» и «a book» — разные карточки. На лицевой стороне без подсказки
-// не понять, какую из них спрашивают. Артикль не ставим: «a water» хуже,
-// чем подпись «существительное».
-const POS_HINTS: Record<string, string> = {
-  noun: 'существительное',
-  adjective: 'прилагательное',
-  adverb: 'наречие',
-};
-
-function title(card: Card): string {
-  return card.homonym && card.pos === 'verb' ? `to ${card.word}` : card.word;
-}
+import { canSpeak, speak } from '../../lib/speech';
+import { POS_HINTS, title } from '../../lib/word';
+import { ReportButton } from '../report/ReportButton';
 
 interface Props {
   card: Card;
@@ -40,7 +30,24 @@ export function CardFace({ card, flipped, onFlip }: Props) {
         <Caption className="card__ipa">{POS_HINTS[card.pos]}</Caption>
       )}
 
-      {card.ipa && <Caption className="card__ipa">/{card.ipa}/</Caption>}
+      {/* Динамик в строке транскрипции, а не отдельно по центру: туда
+          приходится тап «перевернуть», и он озвучивал бы слово. */}
+      <Caption className="card__ipa">
+        {card.ipa && `/${card.ipa}/ `}
+        {canSpeak && (
+          <button
+            type="button"
+            className="link"
+            aria-label="Произнести"
+            onClick={(event) => {
+              event.stopPropagation();
+              speak(card.word);
+            }}
+          >
+            🔊
+          </button>
+        )}
+      </Caption>
 
       {!flipped && <Caption className="card__hint">нажми, чтобы проверить</Caption>}
 
@@ -63,6 +70,7 @@ export function CardFace({ card, flipped, onFlip }: Props) {
           <Caption className="card__pos">
             ⭐ {card.top} · учат: {card.learners}
           </Caption>
+          <ReportButton wordId={card.word_id} />
         </div>
       )}
     </Tappable>

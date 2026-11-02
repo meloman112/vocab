@@ -3,7 +3,7 @@
 import pytest
 from wordfreq import zipf_frequency
 
-from vocab.lexicon import analyze, is_word, lemma_zipf, rank, rank_label
+from vocab.lexicon import analyze, is_word, lemma_zipf, rank, rank_label, suggest
 
 
 @pytest.mark.parametrize(
@@ -102,3 +102,16 @@ def test_rank_labels():
     assert rank_label(lemma_zipf("reliable")) == "топ-5000"
     assert rank_label(0) == "реже топ-20000"
     assert rank_label(lemma_zipf("go"), "A1") == "A1 · топ-100"
+
+
+@pytest.mark.parametrize(
+    ("typo", "fix"), [("helf", "help"), ("thier", "their"), ("recieve", "receive")]
+)
+def test_typo_gets_suggestion(typo, fix):
+    assert suggest(typo) == fix
+
+
+# Редкие и новые настоящие слова: их wordfreq знает, а lemminflect — не все.
+@pytest.mark.parametrize("word", ["help", "serendipity", "selfie", "gonna", "lest"])
+def test_real_word_is_not_a_typo(word):
+    assert suggest(word) is None

@@ -12,6 +12,8 @@ class AddWord(BaseModel):
     word: str = Field(min_length=1, max_length=300)
     # Какое из значений леммы нужно: кнопка «ещё: to book — глагол».
     pos: Literal["noun", "verb", "adjective", "adverb"] | None = None
+    # «Добавить как есть» под подсказкой опечатки: helf — не help, а helf.
+    as_is: bool = False
 
 
 class Review(BaseModel):
@@ -26,6 +28,8 @@ class Example(BaseModel):
 
 class CardOut(BaseModel):
     id: int
+    # Жалоба идёт на слово общего словаря, а не на личную карточку.
+    word_id: int
     word: str
     translation: str
     ipa: str
@@ -54,6 +58,8 @@ class WordEntry(BaseModel):
     """Ответ на присланное слово: содержимое из общего словаря плюс то,
     что касается именно этого запроса."""
 
+    # id слова в общем словаре — для кнопки «сообщить об ошибке».
+    id: int
     lemma: str
     # «reading — форма на -ing: Continuous или герундий» — если прислали не лемму.
     form_note: str | None
@@ -148,3 +154,77 @@ class WeakCard(BaseModel):
     translation: str
     examples: list[Example]
     lapses: int
+
+
+class Cloze(BaseModel):
+    # «She _____ home yesterday.» — пропуск на месте формы слова.
+    text: str
+    # Форма, стоящая в предложении (went), а не лемма.
+    answer: str
+    ru: str
+
+
+class QuizCard(CardOut):
+    # EN→RU: переводы; RU→EN: слова. Правильный среди них, порядок случайный.
+    choices_ru: list[str]
+    choices_en: list[str]
+    # None — ни в одном примере формы слова не нашлось.
+    cloze: Cloze | None
+
+
+class QuizOut(BaseModel):
+    cards: list[QuizCard]
+
+
+ReportReason = Literal["typo", "translation", "example", "other"]
+
+
+class Report(BaseModel):
+    word_id: int
+    reason: ReportReason
+    comment: str | None = Field(default=None, max_length=500)
+
+
+class Me(BaseModel):
+    is_admin: bool
+
+
+class AdminWord(BaseModel):
+    id: int
+    lemma: str
+    translation: str
+    ipa: str
+    pos: str
+    forms: str
+    irregular: bool
+    examples: list[Example]
+    level: str | None
+    banned: bool
+
+
+class ReportedWord(AdminWord):
+    reports: int
+    reasons: list[ReportReason]
+    comments: list[str]
+    last_at: datetime
+
+
+class WordEdit(BaseModel):
+    """Всё, что админ может поменять. Лемму и часть речи — нет: это ключ
+    слова, и карточки людей на него уже ссылаются."""
+
+    translation: str = Field(min_length=1, max_length=200)
+    ipa: str = Field(max_length=100)
+    forms: str = Field(max_length=200)
+    irregular: bool
+    examples: list[Example] = Field(min_length=1, max_length=5)
+    level: Literal["A1", "A2", "B1", "B2", "C1", "C2"] | None
+    banned: bool
+
+
+class AdminSummary(BaseModel):
+    users: int
+    active_week: int
+    words: int
+    banned: int
+    open_reports: int

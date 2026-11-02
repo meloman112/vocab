@@ -5,9 +5,10 @@ import hmac
 import json
 import logging
 import time
+from dataclasses import dataclass
 from urllib.parse import parse_qsl
 
-from fastapi import Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 
 from .. import repo
 from ..config import Settings, settings
@@ -65,26 +66,40 @@ def _tg_id_from_token(
     return cfg.owner_tg_id
 
 
-async def current_user(
-    request: Request,
+@dataclass(frozen=True)
+class Identity:
+    tg_id: int
+    # Имя для рейтинга подписано Telegram только в initData; остальным
+    # путям оно неизвестно, и ensure_user его не трогает.
+    name: str | None
+
+
+async def identity(
     x_init_data: str | None = Header(default=None, alias="X-Init-Data"),
     x_token: str | None = Header(default=None, alias="X-Token"),
     x_tg_id: str | None = Header(default=None, alias="X-Tg-Id"),
-) -> int:
-    """Возвращает users.id. Заголовка нет вовсе — 401, а не 400."""
+) -> Identity:
+    """Кто прислал запрос. Заголовка нет вовсе — 401, а не 400."""
     cfg = settings()
-    # Имя для рейтинга подписано Telegram только в initData; остальным
-    # путям оно неизвестно, и ensure_user его не трогает.
-    name = None
     if x_init_data:
         tg_id, name = parse_init_data(x_init_data, cfg.bot_token)
-    elif x_token:
-        tg_id = _tg_id_from_token(cfg, x_token, x_tg_id)
-    else:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "нужен X-Init-Data или X-Token")
+        return Identity(tg_id, name or None)
+    if x_token:
+        return Identity(_tg_id_from_token(cfg, x_token, x_tg_id), None)
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "нужен X-Init-Data или X-Token")
 
+
+async def current_user(request: Request, who: Identity = Depends(identity)) -> int:
+    """Возвращает users.id."""
     async with request.app.state.pool.acquire() as conn:
-        return await repo.ensure_user(conn, tg_id, name or None)
+        return await repo.ensure_user(conn, who.tg_id, who.name)
+
+
+async def admin_user(request: Request, who: Identity = Depends(identity)) -> int:
+    """Как current_user, но только для админов словаря."""
+    if not settings().is_admin(who.tg_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "только для админов")
+    return await current_user(request, who)
 
 
 async def service_only(

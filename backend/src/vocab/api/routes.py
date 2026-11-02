@@ -1,11 +1,14 @@
 """Ручки. Транспортный слой: разбор запроса, вызов repo, сборка DTO."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import random
+from typing import Literal
 
-from .. import dictionary, enrich, lexicon, repo, srs
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+
+from .. import dictionary, enrich, lexicon, quiz, repo, srs
 from ..config import settings
 from . import schemas
-from .auth import current_user, service_only
+from .auth import Identity, admin_user, current_user, identity, service_only
 
 router = APIRouter()
 
@@ -13,6 +16,10 @@ FORECAST_DAYS = 7
 # Сколько новых слов из общего словаря выдаётся за одно «Давай».
 DISCOVER_LIMIT = 10
 LEADERBOARD_SIZE = 10
+# Неправильных вариантов с запасом: часть отсеется как синонимы и та же лемма.
+DISTRACTOR_POOL = 200
+# Пример с формой слова находится не у каждой карточки — берём с запасом.
+CLOZE_OVERSAMPLE = 4
 
 
 @router.get("/healthz")
@@ -34,8 +41,15 @@ async def add_word(
     """
     try:
         entries = await dictionary.add_text(
-            request.app.state.pool, settings(), user_id, body.word, body.pos
+            request.app.state.pool, settings(), user_id, body.word, body.pos, body.as_is
         )
+    except dictionary.Misspelled as exc:
+        # Отдельно от Rejected: клиенту нужно само исправление, чтобы
+        # показать кнопку, а не только текст.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {"message": str(exc), "suggestion": exc.suggestion},
+        ) from exc
     except dictionary.Rejected as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except enrich.EnrichError as exc:
@@ -87,6 +101,99 @@ async def post_review(
     return schemas.ReviewOut(
         card_id=body.card_id, due=updated["due"], state=updated["state"]
     )
+
+
+@router.get("/quiz", response_model=schemas.QuizOut)
+async def get_quiz(
+    request: Request,
+    mode: Literal["any", "irregular", "cloze"] = "any",
+    limit: int = Query(default=10, ge=1, le=50),
+    user_id: int = Depends(current_user),
+) -> schemas.QuizOut:
+    """Карточки для теста вместе с вариантами ответа. Ответ теста — обычный
+    POST /review: оценку ставит не человек, а проверка ответа."""
+    fetch = limit * CLOZE_OVERSAMPLE if mode == "cloze" else limit
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.quiz_cards(conn, user_id, "irregular" if mode == "irregular" else "any", fetch)
+        pool = await repo.distractors(conn, DISTRACTOR_POOL)
+    rng = random.Random()
+    cards = []
+    for row in rows:
+        gap = quiz.cloze(row["word"], row["forms"], row["examples"])
+        if mode == "cloze" and gap is None:
+            continue
+        cards.append(schemas.QuizCard(
+            **dict(row),
+            top=lexicon.rank_label(row["zipf"], row["level"]),
+            choices_ru=quiz.choices(row, pool, "translation", rng),
+            choices_en=quiz.choices(row, pool, "lemma", rng),
+            cloze=gap,
+        ))
+    return schemas.QuizOut(cards=cards[:limit])
+
+
+@router.post("/reports", status_code=status.HTTP_204_NO_CONTENT)
+async def post_report(
+    body: schemas.Report, request: Request, user_id: int = Depends(current_user)
+) -> None:
+    """Жалоба на слово общего словаря: опечатка, перевод, пример."""
+    comment = (body.comment or "").strip() or None
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.report(conn, user_id, body.word_id, body.reason, comment):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "такого слова в словаре нет")
+
+
+@router.get("/me", response_model=schemas.Me)
+async def get_me(who: Identity = Depends(identity)) -> schemas.Me:
+    """Что показывать в меню: пункт «Админка» — только админам."""
+    return schemas.Me(is_admin=settings().is_admin(who.tg_id))
+
+
+@router.get("/admin/summary", response_model=schemas.AdminSummary,
+            dependencies=[Depends(admin_user)])
+async def admin_summary(request: Request) -> schemas.AdminSummary:
+    async with request.app.state.pool.acquire() as conn:
+        return schemas.AdminSummary(**dict(await repo.admin_summary(conn)))
+
+
+@router.get("/admin/reports", response_model=list[schemas.ReportedWord],
+            dependencies=[Depends(admin_user)])
+async def admin_reports(request: Request) -> list[schemas.ReportedWord]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.open_reports(conn)
+    return [schemas.ReportedWord(**dict(r)) for r in rows]
+
+
+@router.post("/admin/reports/{word_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(admin_user)])
+async def admin_dismiss(word_id: int, request: Request) -> None:
+    """Жалобы не по делу: слово остаётся как есть."""
+    async with request.app.state.pool.acquire() as conn:
+        await repo.resolve_reports(conn, word_id)
+
+
+@router.get("/admin/words", response_model=list[schemas.AdminWord],
+            dependencies=[Depends(admin_user)])
+async def admin_words(
+    request: Request, q: str = Query(min_length=1, max_length=100)
+) -> list[schemas.AdminWord]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.admin_words(conn, repo.normalize_word(q), 50)
+    return [schemas.AdminWord(**dict(r)) for r in rows]
+
+
+@router.put("/admin/words/{word_id}", response_model=schemas.AdminWord,
+            dependencies=[Depends(admin_user)])
+async def admin_update_word(
+    word_id: int, body: schemas.WordEdit, request: Request
+) -> schemas.AdminWord:
+    fields = body.model_dump()
+    fields["translation"] = fields["translation"].strip()
+    async with request.app.state.pool.acquire() as conn:
+        row = await repo.update_word(conn, word_id, fields)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "такого слова в словаре нет")
+    return schemas.AdminWord(**dict(row))
 
 
 @router.get("/stats", response_model=schemas.StatsOut)

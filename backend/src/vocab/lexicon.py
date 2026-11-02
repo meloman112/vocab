@@ -177,3 +177,36 @@ def rank_label(zipf: float, level: str | None = None) -> str:
 
 def is_word(text: str) -> bool:
     return bool(WORD_RE.match(text)) and zipf_frequency(text, "en") > 0
+
+
+# wordfreq собран из веба и знает опечатки: helf, thier, recieve там есть
+# с частотой 1–3. Частые слова без словарной статьи (selfie, gonna, covid)
+# опечатками не считаются — их порог отсекает.
+TYPO_MAX_ZIPF = 3.0
+# Исправление должно быть заметно частотнее: help в 20 000 раз чаще helf.
+TYPO_MIN_GAIN = 1.5
+
+
+def suggest(word: str) -> str | None:
+    """Вероятное исправление опечатки: helf → help. None — слово похоже на настоящее.
+
+    Кандидаты — всё на расстоянии одной правки (Норвиг), из них только
+    известные словарю lemminflect: wordfreq один опечатки не отличит.
+    """
+    if getAllLemmas(word) or zipf_frequency(word, "en") >= TYPO_MAX_ZIPF:
+        return None
+    known = [e for e in _edits(word) if getAllLemmas(e)]
+    best = max(known, key=lambda e: zipf_frequency(e, "en"), default=None)
+    if best and zipf_frequency(best, "en") >= zipf_frequency(word, "en") + TYPO_MIN_GAIN:
+        return best
+    return None
+
+
+def _edits(word: str) -> set[str]:
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+    deletes = {a + b[1:] for a, b in splits if b}
+    swaps = {a + b[1] + b[0] + b[2:] for a, b in splits if len(b) > 1}
+    replaces = {a + c + b[1:] for a, b in splits if b for c in letters}
+    inserts = {a + c + b for a, b in splits for c in letters}
+    return (deletes | swaps | replaces | inserts) - {word}
