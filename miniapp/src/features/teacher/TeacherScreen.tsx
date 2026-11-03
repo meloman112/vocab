@@ -37,7 +37,10 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
     );
   }, [version]);
 
-  useEffect(() => window.scrollTo(0, 0), [open, tab]);
+  // Без фигурных скобок Promise от scrollTo стал бы «очисткой» эффекта.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [open, tab]);
 
   if (error) return <Placeholder className="screen" header="Не открылось" description={error} />;
   if (!book || !students || !common) {

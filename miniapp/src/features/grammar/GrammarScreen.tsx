@@ -40,7 +40,11 @@ export function GrammarScreen({ onExit }: { onExit: () => void }) {
   }, [view, onExit]);
   useBackButton(back);
 
-  useEffect(() => window.scrollTo(0, 0), [view]);
+  // Фигурные скобки обязательны: в новых Chromium scrollTo возвращает
+  // Promise, и React принял бы его за функцию очистки — «n is not a function».
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   if (error) return <Placeholder className="screen" header="Тетрадь не открылась" description={error} />;
   if (!data) {
