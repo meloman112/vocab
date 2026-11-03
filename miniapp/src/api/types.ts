@@ -85,6 +85,125 @@ export const REPORT_REASONS: Record<ReportReason, string> = {
 
 export interface Me {
   is_admin: boolean;
+  is_teacher: boolean;
+  grammar_done: number;
+  grammar_wrong: number;
+}
+
+// --- тетрадь ---------------------------------------------------------------
+
+export interface Rule {
+  title: string;
+  formula: string;
+  text: string;
+}
+
+export interface ExerciseData {
+  id: number;
+  /** Времена упражнения кодами движка: «CS», «DWX». Пусто — ручные ответы. */
+  tenses: string;
+  task: string;
+  items: string[];
+  /** Правило, которое открывает подсказка, — если не по времени пропуска. */
+  rule?: string;
+  /** Варианты для плиток: who / which / that… */
+  choices?: string[];
+  /** Запятые проверяются (non-defining clauses). */
+  commas?: boolean;
+}
+
+export interface TopicData {
+  id: string;
+  title: string;
+  rules: string[];
+  exercises: ExerciseData[];
+}
+
+export interface GrammarContent {
+  rules: Record<string, Rule>;
+  topics: TopicData[];
+}
+
+export interface GrammarResult {
+  clean: boolean;
+  was_wrong: boolean;
+  answers: string[];
+}
+
+export interface GrammarProgress {
+  results: Record<string, GrammarResult>;
+  /** Засчитанные учителем ответы: item → номер пропуска → ответы. */
+  accepted: Record<string, Record<string, string[]>>;
+}
+
+export interface GrammarMistakeIn {
+  slot: number;
+  answer: string;
+  why: string;
+}
+
+export interface GrammarAttempt {
+  item: string;
+  clean: boolean;
+  answers: string[];
+  mistakes: GrammarMistakeIn[];
+}
+
+/** Предложение для PDF: текст книги, ответ ученика или скобки несделанного. */
+export interface PdfPart {
+  text?: string;
+  answer?: string;
+  hint?: string;
+}
+
+export interface PdfExercise {
+  id: number;
+  task: string;
+  items: { n: number; done: boolean; parts: PdfPart[] }[];
+}
+
+export interface Student {
+  user_id: number;
+  name: string;
+  done: number;
+  first_try: number;
+  wrong_now: number;
+  /** Неразобранные ошибки — учитель их ещё не засчитал. */
+  mistakes: number;
+  mistakes_week: number;
+  last_at: string | null;
+}
+
+export interface StudentResult {
+  item: string;
+  clean: boolean;
+  was_wrong: boolean;
+  answers: (string | null)[];
+  updated_at: string;
+}
+
+export interface StudentMistake {
+  id: number;
+  item: string;
+  slot: number;
+  answer: string;
+  why: string;
+  created_at: string;
+  accepted: boolean;
+}
+
+export interface StudentDetail {
+  user_id: number;
+  name: string;
+  results: StudentResult[];
+  mistakes: StudentMistake[];
+}
+
+export interface CommonMistake {
+  item: string;
+  students: number;
+  attempts: number;
+  answers: string[];
 }
 
 export type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';

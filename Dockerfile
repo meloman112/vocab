@@ -10,6 +10,9 @@ RUN mkdir -p /build/backend/src/vocab/api && npm run build
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+# DejaVu — кириллица в PDF тетради: встроенные шрифты PDF её не знают.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY backend/ ./

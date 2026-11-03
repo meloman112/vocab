@@ -40,8 +40,18 @@ def review_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[
             InlineKeyboardButton(
-                text="🧠 Повторять", web_app=WebAppInfo(url=cfg.miniapp_url)
+                text="🧠 Повторять", web_app=WebAppInfo(url=f"{cfg.miniapp_url}?screen=cards")
             )
+        ]]
+    )
+
+
+def start_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
+    """Два раздела одного бота: тетрадь по грамматике и слова."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="📒 Тетрадь", web_app=WebAppInfo(url=f"{cfg.miniapp_url}?screen=grammar")),
+            InlineKeyboardButton(text="🧠 Слова", web_app=WebAppInfo(url=f"{cfg.miniapp_url}?screen=cards")),
         ]]
     )
 
@@ -126,14 +136,17 @@ async def add_and_reply(
 @router.message(Command("start"))
 async def start(message: Message, cfg: Settings) -> None:
     await message.answer(
-        "Пришли английское слово в любой форме — went, children, reading — "
-        "отвечу переводом, формой и примерами и добавлю в повторение.\n"
-        "Слово бывает разными частями речи — уточни: to book (бронировать), "
-        "a book (книга).\n"
-        "Пришлёшь фразу или предложение — достану из него устойчивые выражения.\n\n"
-        "/review — повторение и тесты\n/quiz — тест прямо в чате\n/stats — цифры и серия\n/top — что учат чаще всего\n"
-        "/rating — рейтинг недели",
-        reply_markup=review_keyboard(cfg),
+        "Привет! Здесь два раздела.\n\n"
+        "📒 Тетрадь — 134 упражнения по грамматике из Work book: времена, Passive, "
+        "Conditionals, Relative clauses, Gerund, модальные глаголы, Participle. "
+        "Каждую ошибку бот разбирает, а учитель видит, где ты споткнулся.\n\n"
+        "🧠 Слова — пришли английское слово в любой форме (went, children, reading): "
+        "отвечу переводом, формой и примерами и добавлю в повторение. "
+        "Части речи уточняй так: to book (бронировать), a book (книга). "
+        "Из фразы или предложения достану устойчивые выражения.\n\n"
+        "/grammar — тетрадь\n/review — повторение слов и тесты\n/quiz — тест прямо в чате\n"
+        "/stats — цифры и серия\n/top — что учат чаще всего\n/rating — рейтинг недели",
+        reply_markup=start_keyboard(cfg),
     )
 
 
@@ -223,6 +236,9 @@ async def quiz(message: Message, api: VocabAPI, cfg: Settings) -> None:
             reply_markup=review_keyboard(cfg),
         )
         return
+    # Опросы прошлого теста забываются: ответ на них сдвинул бы счёт нового.
+    for poll_id in [p for p, asked in polls.items() if asked[0] == message.from_user.id]:
+        del polls[poll_id]
     quizzes[message.from_user.id] = Quiz(message.chat.id, cards)
     await send_question(message.bot, message.from_user.id)
 
@@ -278,7 +294,8 @@ async def send_question(bot: Bot, tg_id: int) -> None:
     card = session.cards[session.index]
     title = f"to {card['word']}" if card["homonym"] and card["pos"] == "verb" else card["word"]
     options = [option[:POLL_OPTION] for option in card["choices_ru"]]
-    example = card["examples"][0]
+    # Примеры админ может стереть в редакторе слова — тогда без пояснения.
+    example = card["examples"][0] if card["examples"] else None
     correct = card["choices_ru"].index(card["translation"])
     sent = await bot.send_poll(
         session.chat_id,
@@ -287,7 +304,7 @@ async def send_question(bot: Bot, tg_id: int) -> None:
         type="quiz",
         correct_option_id=correct,
         is_anonymous=False,
-        explanation=f"{example['en']} — {example['ru']}"[:POLL_EXPLANATION],
+        explanation=f"{example['en']} — {example['ru']}"[:POLL_EXPLANATION] if example else None,
     )
     polls[sent.poll.id] = (tg_id, card["id"], correct)
 

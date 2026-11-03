@@ -5,6 +5,7 @@
 """
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -25,9 +26,13 @@ class VocabAPI:
         await self._client.aclose()
 
     async def _call(
-        self, method: str, url: str, tg_id: int | None = None, **kwargs: Any
+        self, method: str, url: str, tg_id: int | None = None,
+        tg_name: str | None = None, **kwargs: Any,
     ) -> Any:
-        headers = {"X-Tg-Id": str(tg_id)} if tg_id is not None else None
+        headers = {"X-Tg-Id": str(tg_id)} if tg_id is not None else {}
+        if tg_name:
+            # Заголовок HTTP — только latin-1, а имена бывают кириллицей.
+            headers["X-Tg-Name"] = quote(tg_name)
         response = await self._client.request(method, url, headers=headers, **kwargs)
         # raise_for_status, а не молчаливый разбор: ошибку API должен увидеть
         # хендлер бота и сказать о ней пользователю, а не проглотить.
@@ -76,3 +81,21 @@ class VocabAPI:
 
     async def ban(self, word: str) -> None:
         await self._call("POST", "/internal/ban", json={"word": word})
+
+    async def me(self, tg_id: int, tg_name: str | None = None) -> dict[str, Any]:
+        return await self._call("GET", "/me", tg_id, tg_name)
+
+    async def create_teacher_invite(self, tg_id: int) -> dict[str, Any]:
+        return await self._call("POST", "/admin/teacher-invites", tg_id)
+
+    async def redeem_teacher_invite(self, tg_id: int, tg_name: str, code: str) -> dict[str, Any]:
+        return await self._call("POST", f"/teacher-invites/{code}/redeem", tg_id, tg_name)
+
+    async def teachers(self, tg_id: int) -> list[dict[str, Any]]:
+        return await self._call("GET", "/admin/teachers", tg_id)
+
+    async def remove_teacher(self, tg_id: int, user_id: int) -> None:
+        await self._call("DELETE", f"/admin/teachers/{user_id}", tg_id)
+
+    async def students(self, tg_id: int) -> list[dict[str, Any]]:
+        return await self._call("GET", "/teacher/students", tg_id)

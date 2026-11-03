@@ -5,15 +5,27 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import MenuButtonWebApp, WebAppInfo
+from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from ..client import VocabAPI
 from ..config import settings
 from .handlers import router
 from .reminders import start_scheduler
+from .teachers import router as teachers_router
 
 log = logging.getLogger(__name__)
+
+# Подсказки в меню «/». Учительские и админские команды сюда не входят:
+# ученику они ни к чему, а нужные люди о них знают.
+COMMANDS = [
+    BotCommand(command="grammar", description="📒 Тетрадь по грамматике"),
+    BotCommand(command="review", description="🧠 Повторение слов и тесты"),
+    BotCommand(command="quiz", description="Тест по словам в чате"),
+    BotCommand(command="stats", description="Мои цифры и серия"),
+    BotCommand(command="rating", description="Рейтинг недели"),
+    BotCommand(command="top", description="Что учат чаще всего"),
+]
 
 
 async def main() -> None:
@@ -26,6 +38,8 @@ async def main() -> None:
     api = VocabAPI(cfg)
 
     dispatcher = Dispatcher()
+    # Тетрадь и учителя — раньше слов: основной роутер ловит любой текст.
+    dispatcher.include_router(teachers_router)
     dispatcher.include_router(router)
 
     # Всё, что может упасть, — внутри try: иначе отказ Telegram на первом же
@@ -37,9 +51,10 @@ async def main() -> None:
         # без команды /review.
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
-                text="Повторять", web_app=WebAppInfo(url=cfg.miniapp_url)
+                text="Учиться", web_app=WebAppInfo(url=cfg.miniapp_url)
             )
         )
+        await bot.set_my_commands(COMMANDS)
         scheduler = start_scheduler(bot, api, cfg)
         await dispatcher.start_polling(bot, api=api, cfg=cfg)
     finally:

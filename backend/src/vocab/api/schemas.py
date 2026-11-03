@@ -187,6 +187,11 @@ class Report(BaseModel):
 
 class Me(BaseModel):
     is_admin: bool
+    # Учителю в меню показывается «Ученики». Админ — всегда учитель.
+    is_teacher: bool
+    # Сколько заданий тетради сделано и сколько из них пока с ошибкой.
+    grammar_done: int
+    grammar_wrong: int
 
 
 class AdminWord(BaseModel):
@@ -228,3 +233,131 @@ class AdminSummary(BaseModel):
     words: int
     banned: int
     open_reports: int
+
+
+# --- тетрадь -------------------------------------------------------------------
+
+# Ограничения — от мусора, а не от учеников: в задании до ~10 пропусков,
+# полное предложение в Passive короче 200 символов.
+class GrammarMistake(BaseModel):
+    slot: int = Field(ge=0, le=30)
+    answer: str = Field(min_length=1, max_length=300)
+    # Разбор движка: «Не то время. «yesterday» — …». Учитель видит его как есть.
+    why: str = Field(default="", max_length=300)
+
+
+class GrammarAttempt(BaseModel):
+    item: str = Field(pattern=r"^\d{1,3}-\d{1,3}$")
+    clean: bool
+    answers: list[str] = Field(max_length=30)
+    mistakes: list[GrammarMistake] = Field(default=[], max_length=50)
+
+
+class GrammarResult(BaseModel):
+    clean: bool
+    was_wrong: bool
+    answers: list[str]
+
+
+class GrammarProgress(BaseModel):
+    results: dict[str, GrammarResult]
+    # item → номер пропуска → ответы, которые засчитал учитель.
+    accepted: dict[str, dict[int, list[str]]]
+
+
+class LegacyResult(BaseModel):
+    """Запись прежнего мини-аппа из CloudStorage: {clean, wasWrong, answers}."""
+
+    clean: bool
+    wasWrong: bool = False
+    answers: list[str | None] = Field(default=[], max_length=30)
+
+
+class GrammarImport(BaseModel):
+    items: dict[str, LegacyResult] = Field(max_length=5000)
+
+
+class ImportOut(BaseModel):
+    imported: int
+
+
+class PdfPart(BaseModel):
+    text: str | None = Field(default=None, max_length=2000)
+    answer: str | None = Field(default=None, max_length=300)
+    hint: str | None = Field(default=None, max_length=300)
+
+
+class PdfItem(BaseModel):
+    n: int
+    done: bool
+    parts: list[PdfPart] = Field(max_length=40)
+
+
+class PdfExercise(BaseModel):
+    id: int
+    task: str = Field(max_length=500)
+    items: list[PdfItem] = Field(max_length=40)
+
+
+class PdfRequest(BaseModel):
+    exercises: list[PdfExercise] = Field(min_length=1, max_length=200)
+
+
+class Student(BaseModel):
+    user_id: int
+    name: str
+    done: int
+    first_try: int
+    wrong_now: int
+    # Ошибки, которые учитель ещё не засчитал: всего и за неделю.
+    mistakes: int
+    mistakes_week: int
+    last_at: datetime | None
+
+
+class StudentResult(BaseModel):
+    item: str
+    clean: bool
+    was_wrong: bool
+    answers: list[str | None]
+    updated_at: datetime
+
+
+class StudentMistake(BaseModel):
+    id: int
+    item: str
+    slot: int
+    answer: str
+    why: str
+    created_at: datetime
+    accepted: bool
+
+
+class StudentDetail(BaseModel):
+    user_id: int
+    name: str
+    results: list[StudentResult]
+    mistakes: list[StudentMistake]
+
+
+class CommonMistake(BaseModel):
+    item: str
+    students: int
+    attempts: int
+    answers: list[str]
+
+
+class Teacher(BaseModel):
+    user_id: int
+    tg_id: int
+    name: str
+
+
+class Invite(BaseModel):
+    code: str
+    ttl_days: int
+
+
+class Redeemed(BaseModel):
+    # Кто выдал ссылку — бот скажет ему, что учитель появился.
+    inviter_tg_id: int | None

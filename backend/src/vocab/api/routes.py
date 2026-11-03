@@ -144,9 +144,18 @@ async def post_report(
 
 
 @router.get("/me", response_model=schemas.Me)
-async def get_me(who: Identity = Depends(identity)) -> schemas.Me:
-    """Что показывать в меню: пункт «Админка» — только админам."""
-    return schemas.Me(is_admin=settings().is_admin(who.tg_id))
+async def get_me(
+    request: Request, who: Identity = Depends(identity), user_id: int = Depends(current_user)
+) -> schemas.Me:
+    """Что показывать в меню: «Админка» — админам, «Ученики» — учителям."""
+    admin = settings().is_admin(who.tg_id)
+    async with request.app.state.pool.acquire() as conn:
+        teacher = admin or await repo.is_teacher(conn, user_id)
+        grammar = await repo.grammar_summary(conn, user_id)
+    return schemas.Me(
+        is_admin=admin, is_teacher=teacher,
+        grammar_done=grammar["done"], grammar_wrong=grammar["wrong_now"],
+    )
 
 
 @router.get("/admin/summary", response_model=schemas.AdminSummary,

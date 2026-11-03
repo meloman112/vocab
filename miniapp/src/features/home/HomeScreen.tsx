@@ -2,10 +2,12 @@ import { Badge, Cell, List, Section, Text } from '@telegram-apps/telegram-ui';
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api/client';
-import type { Stats } from '../../api/types';
+import type { Me, Stats } from '../../api/types';
 import { MODES, type ModeId } from '../quiz/modes';
 
 interface Props {
+  onGrammar: () => void;
+  onTeacher: () => void;
   onCards: () => void;
   onQuiz: (mode: ModeId) => void;
   onLeaderboard: () => void;
@@ -14,11 +16,12 @@ interface Props {
 
 interface Header {
   stats: Stats;
+  me: Me;
   /** null — не админ; число — открытые жалобы. */
   reports: number | null;
 }
 
-export function HomeScreen({ onCards, onQuiz, onLeaderboard, onAdmin }: Props) {
+export function HomeScreen({ onGrammar, onTeacher, onCards, onQuiz, onLeaderboard, onAdmin }: Props) {
   const [header, setHeader] = useState<Header | null>(null);
   const [error, setError] = useState('');
 
@@ -26,18 +29,31 @@ export function HomeScreen({ onCards, onQuiz, onLeaderboard, onAdmin }: Props) {
     Promise.all([api.stats(), api.me()])
       .then(async ([stats, me]) => ({
         stats,
+        me,
         reports: me.is_admin ? (await api.admin.summary()).open_reports : null,
       }))
       .then(setHeader, (e: Error) => setError(e.message));
   }, []);
 
   const due = header?.stats.due_now ?? 0;
+  const me = header?.me;
 
   return (
     <div className="screen screen--list">
       <List>
+        <Section header="Грамматика" footer="134 упражнения из Work book: каждую ошибку разбираем, учитель её видит.">
+          <Cell
+            before={<Icon>📒</Icon>}
+            subtitle={me ? (me.grammar_done ? `Сделано ${me.grammar_done} заданий` : 'От Present Simple до Participle') : undefined}
+            after={me && me.grammar_wrong > 0 ? <Badge type="number" mode="critical">{me.grammar_wrong}</Badge> : undefined}
+            onClick={onGrammar}
+          >
+            Тетрадь
+          </Cell>
+        </Section>
+
         <Section
-          header="Повторение"
+          header="Слова"
           footer={error ? `Цифры не загрузились: ${error}` : streakLine(header?.stats)}
         >
           <Cell
@@ -67,6 +83,11 @@ export function HomeScreen({ onCards, onQuiz, onLeaderboard, onAdmin }: Props) {
           <Cell before={<Icon>🏆</Icon>} onClick={onLeaderboard}>
             Рейтинг недели
           </Cell>
+          {me?.is_teacher && (
+            <Cell before={<Icon>👩‍🏫</Icon>} subtitle="Ошибки учеников в тетради" onClick={onTeacher}>
+              Ученики
+            </Cell>
+          )}
           {header?.reports != null && (
             <Cell
               before={<Icon>🛠</Icon>}

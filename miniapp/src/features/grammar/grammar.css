@@ -1,0 +1,711 @@
+/*
+ * Тетрадь: лист с полями, синяя ручка ученика, красная — учителя.
+ * Цвета — из темы Telegram, как во всём мини-аппе: тёмная тема сама.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap');
+
+:root {
+  --g-bg: var(--tg-theme-bg-color, #fff);
+  --g-ink: var(--tg-theme-text-color, #000);
+  --g-muted: var(--tg-theme-hint-color, #8a8a8e);
+  --g-pen: var(--tg-theme-link-color, #2481cc);
+  --g-pen-soft: color-mix(in srgb, var(--g-pen) 12%, var(--g-bg));
+  --g-red: var(--tg-theme-destructive-text-color, #e53935);
+  --g-red-soft: color-mix(in srgb, var(--g-red) 12%, var(--g-bg));
+  --g-ok: #31b545;
+  --g-ok-soft: color-mix(in srgb, var(--g-ok) 14%, var(--g-bg));
+  --g-amber: #f5a623;
+  --g-line: color-mix(in srgb, var(--g-muted) 30%, transparent);
+  --g-margin: color-mix(in srgb, var(--g-red) 35%, transparent);
+  --g-hand: 'Caveat', 'Segoe Print', cursive;
+}
+
+/* --- главная и темы --- */
+
+.g-head {
+  padding: 20px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.g-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--g-muted);
+}
+
+.g-title {
+  margin: 0;
+  text-wrap: balance;
+}
+
+.g-bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  background: var(--g-line);
+  margin-top: 4px;
+}
+
+.g-bar i {
+  height: 100%;
+  background: var(--g-ok);
+  transition: width 0.3s;
+}
+
+.g-bar i.warn {
+  background: var(--g-amber);
+}
+
+.g-repeat {
+  display: grid;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.g-review {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: left;
+  font: 600 16px var(--tgui--font-family);
+  cursor: pointer;
+  color: var(--g-red);
+  background: var(--g-red-soft);
+}
+
+.g-review small {
+  display: block;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.g-review span {
+  font: 600 26px/1 var(--g-hand);
+}
+
+.g-review.mix {
+  color: var(--g-pen);
+  background: var(--g-pen-soft);
+}
+
+.g-topic-num {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--g-pen);
+  background: var(--g-pen-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-check {
+  color: var(--g-ok);
+  font-weight: 700;
+}
+
+.g-topic {
+  gap: 12px;
+}
+
+.g-rules {
+  background: var(--g-bg);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.g-rules summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.g-rules h3 {
+  margin: 14px 0 4px;
+  font-size: 15px;
+}
+
+.g-rules p {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.g-formula {
+  font: 600 13px/1.7 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  white-space: pre-line;
+}
+
+.g-list {
+  display: grid;
+  gap: 10px;
+}
+
+.g-ex-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  text-align: left;
+  color: var(--g-ink);
+  background: var(--g-bg);
+  font-family: var(--tgui--font-family);
+  cursor: pointer;
+}
+
+.g-ex-num {
+  grid-row: span 2;
+  min-width: 1.6em;
+  text-align: center;
+  font: 700 22px/1 var(--tgui--font-family);
+  color: var(--g-pen);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-ex-title {
+  font-size: 14px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.g-ex-count {
+  font-size: 13px;
+  color: var(--g-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-ex-card .g-bar {
+  grid-column: 2 / 4;
+  margin: 0;
+}
+
+/* --- упражнение --- */
+
+.g-run {
+  gap: 12px;
+  /* Место под закреплённую кнопку «Проверить». */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+.g-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.g-top__t {
+  flex: 1;
+  min-width: 0;
+}
+
+.g-top__t b {
+  display: block;
+  font-size: 16px;
+}
+
+.g-top__t span {
+  font-size: 13px;
+  color: var(--g-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--g-line);
+  flex: none;
+}
+
+.g-modes button {
+  border: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font: 500 13px var(--tgui--font-family);
+  color: var(--g-ink);
+  background: transparent;
+  cursor: pointer;
+}
+
+.g-modes button[aria-pressed='true'] {
+  color: var(--g-pen);
+  background: var(--g-bg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.g-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g-dot {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--g-line);
+  font-size: 11px;
+  color: var(--g-muted);
+  background: var(--g-bg);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-dot.ok {
+  color: #fff;
+  border-color: var(--g-ok);
+  background: var(--g-ok);
+}
+
+.g-dot.fixed {
+  color: #fff;
+  border-color: var(--g-amber);
+  background: var(--g-amber);
+}
+
+.g-dot.cur {
+  border: 2.5px solid var(--g-pen);
+  color: var(--g-pen);
+  font-weight: 700;
+}
+
+.g-dot.cur.ok,
+.g-dot.cur.fixed {
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--g-bg), 0 0 0 4px var(--g-pen);
+}
+
+.g-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 18px 30px;
+  border-radius: 16px;
+  background: var(--g-bg);
+}
+
+/* Поля тетради. */
+.g-sheet::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--g-margin);
+}
+
+.g-task {
+  margin: 0;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.g-sent {
+  font-size: 18px;
+  line-height: 2.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.g-num {
+  margin-right: 4px;
+  color: var(--g-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.g-slot.wide {
+  display: flex;
+  width: 100%;
+  margin: 6px 0;
+}
+
+.g-slot input,
+.g-slot textarea {
+  font: 18px var(--tgui--font-family);
+  color: var(--g-pen);
+  border: 0;
+  border-bottom: 2px solid var(--g-pen);
+  border-radius: 6px 6px 0 0;
+  padding: 4px 8px;
+  background: var(--g-pen-soft);
+  width: 8.5em;
+  max-width: 62vw;
+}
+
+.g-slot textarea {
+  width: 100%;
+  max-width: none;
+  resize: none;
+  line-height: 1.4;
+}
+
+.g-slot input:focus,
+.g-slot textarea:focus {
+  outline: none;
+  background: var(--g-bg);
+  box-shadow: 0 0 0 2px var(--g-pen) inset;
+}
+
+.g-verb {
+  font-size: 15px;
+  color: var(--g-muted);
+  white-space: nowrap;
+}
+
+.g-filled {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  color: var(--g-ok);
+  background: var(--g-ok-soft);
+}
+
+.g-slot.bad input,
+.g-slot.bad textarea,
+.g-slot.bad .g-drop {
+  border-color: var(--g-red);
+  color: var(--g-red);
+  background: var(--g-red-soft);
+}
+
+/* Ответ красной ручкой учителя — над пропуском. */
+.g-ans {
+  position: absolute;
+  left: 4px;
+  bottom: calc(100% - 4px);
+  font: 600 22px/1 var(--g-hand);
+  color: var(--g-red);
+  white-space: nowrap;
+  transform: rotate(-2deg);
+  pointer-events: none;
+}
+
+.g-slot.wide .g-ans {
+  position: static;
+  white-space: normal;
+  width: 100%;
+}
+
+.g-drop {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 6.5em;
+  min-height: 38px;
+  padding: 3px;
+  border: 2px dashed var(--g-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.g-slot.wide .g-drop {
+  width: 100%;
+}
+
+.g-drop.active {
+  border-color: var(--g-pen);
+  background: var(--g-pen-soft);
+}
+
+.g-drop.hover {
+  border-style: solid;
+}
+
+.g-tile {
+  padding: 7px 12px;
+  border: 1px solid var(--g-line);
+  border-radius: 9px;
+  font: 500 16px var(--tgui--font-family);
+  color: var(--g-ink);
+  background: var(--g-bg);
+  box-shadow: 0 2px 0 var(--g-line);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.g-drop .g-tile {
+  padding: 4px 9px;
+  box-shadow: none;
+  color: var(--g-pen);
+}
+
+.g-tile.ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+}
+
+.g-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.g-bank-label {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+.g-fb {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.g-fb.ok {
+  font-weight: 600;
+  color: var(--g-ok);
+  background: var(--g-ok-soft);
+}
+
+.g-fb.bad {
+  background: var(--g-red-soft);
+}
+
+.g-why {
+  font-weight: 600;
+  color: var(--g-red);
+}
+
+.g-why span {
+  font-weight: 400;
+  color: var(--g-ink);
+}
+
+.g-why small {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-muted);
+}
+
+.g-ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g-ladder button {
+  padding: 6px 11px;
+  border: 1px solid var(--g-line);
+  border-radius: 9px;
+  font: 500 13px var(--tgui--font-family);
+  color: var(--g-ink);
+  background: var(--g-bg);
+  cursor: pointer;
+}
+
+.g-ladder button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.g-book {
+  padding: 8px 10px;
+  border-left: 3px solid var(--g-pen);
+  border-radius: 0 9px 9px 0;
+  font-size: 14px;
+  background: var(--g-bg);
+}
+
+.g-book small {
+  display: block;
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+.g-bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 20px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, var(--tg-theme-secondary-bg-color, #f0f0f0) 35%);
+}
+
+.g-go {
+  --tgui--button_color: var(--g-ok);
+}
+
+/* --- итоги и учитель --- */
+
+.g-summary {
+  gap: 14px;
+}
+
+.g-result {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.g-big {
+  font: 700 46px/1.1 var(--tgui--font-family);
+  color: var(--g-ok);
+  font-variant-numeric: tabular-nums;
+}
+
+.g-mistakes {
+  display: grid;
+  gap: 8px;
+}
+
+.g-mistake {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-line;
+  background: var(--g-bg);
+}
+
+.g-mistake mark {
+  background: none;
+  font-weight: 600;
+  color: var(--g-ok);
+}
+
+.g-actions {
+  margin-top: 4px;
+}
+
+.g-common {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--g-line);
+  background: var(--g-bg);
+}
+
+.g-common .g-mistake {
+  padding: 0;
+}
+
+.g-wrong-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g-wrong {
+  color: var(--g-red);
+  text-decoration-thickness: 1.5px;
+}
+
+.g-student {
+  gap: 12px;
+}
+
+.g-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--g-bg);
+}
+
+.g-card .g-mistake {
+  padding: 0;
+}
+
+.g-attempt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--g-line);
+  font-size: 15px;
+}
+
+/* Текст ошибки сжимается и переносится, кнопка «Засчитать» — никогда. */
+.g-attempt > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.g-attempt > :last-child {
+  flex: none;
+}
+
+.g-attempt-why {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.g-accepted {
+  flex: none;
+  font-size: 13px;
+  color: var(--g-ok);
+}
+
+.g-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--g-bg);
+  background: var(--g-ink);
+  transform: translateX(-50%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .g-fb,
+  .g-book {
+    animation: g-rise 0.18s ease-out;
+  }
+
+  @keyframes g-rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}

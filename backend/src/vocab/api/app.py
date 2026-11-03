@@ -14,7 +14,9 @@ from .. import lexicon
 from ..config import settings
 from ..db import create_pool, migrate
 from ..dictionary import backfill_zipf
+from .. import grammar
 from ..mcp.server import build_mcp_app
+from .grammar import router as grammar_router
 from .routes import router
 
 log = logging.getLogger(__name__)
@@ -46,6 +48,8 @@ def create_app() -> FastAPI:
         await backfill_zipf(app.state.pool)
         # Шкала «топ-N» строится ~2 секунды — здесь, а не на первом запросе.
         lexicon.rank(0)
+        # Битый content.json должен ронять старт, а не первого ученика.
+        log.info("тетрадь: %s заданий", len(grammar.content().items))
         try:
             yield
         finally:
@@ -70,6 +74,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(router)
+    app.include_router(grammar_router)
     app.mount("/mcp", mcp_app)
 
     if STATIC_DIR.is_dir():

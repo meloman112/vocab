@@ -3,7 +3,14 @@ import type {
   AdminSummary,
   AdminWord,
   Card,
+  CommonMistake,
+  GrammarAttempt,
+  GrammarContent,
+  GrammarProgress,
   Leaderboard,
+  PdfExercise,
+  Student,
+  StudentDetail,
   Me,
   QuizCard,
   QuizSource,
@@ -32,8 +39,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     // Текст ошибки не показываем как есть: там бывает detail от FastAPI,
     // пользователю от него пользы нет. Статус в сообщении — чтобы 401
-    // (открыли вне Telegram) отличался от 500.
-    throw new Error(`Запрос ${path} вернул ${response.status}`);
+    // (открыли вне Telegram) отличался от 500. Исключение — 502 от
+    // Telegram при отправке PDF: там detail объясняет, что нажать Start.
+    const detail = response.status === 502 ? ((await response.json().catch(() => null)) as { detail?: unknown } | null)?.detail : null;
+    throw new Error(typeof detail === 'string' ? detail : `Запрос ${path} вернул ${response.status}`);
   }
   // 204 — тела нет, и json() упал бы на пустой строке.
   if (response.status === 204) return undefined as T;
@@ -64,6 +73,21 @@ export const api = {
     send<void>('POST', '/reports', { word_id: wordId, reason }),
 
   me: () => request<Me>('/me'),
+
+  grammar: {
+    content: () => request<GrammarContent>('/grammar/content'),
+    progress: () => request<GrammarProgress>('/grammar/progress'),
+    attempt: (attempt: GrammarAttempt) => send<void>('POST', '/grammar/attempts', attempt),
+    import: (items: Record<string, unknown>) => send<{ imported: number }>('POST', '/grammar/import', { items }),
+    pdf: (exercises: PdfExercise[]) => send<void>('POST', '/grammar/pdf', { exercises }),
+  },
+
+  teacher: {
+    students: () => request<Student[]>('/teacher/students'),
+    student: (userId: number) => request<StudentDetail>(`/teacher/students/${userId}`),
+    accept: (mistakeId: number) => send<void>('POST', `/teacher/mistakes/${mistakeId}/accept`),
+    common: () => request<CommonMistake[]>('/teacher/mistakes/common'),
+  },
 
   admin: {
     summary: () => request<AdminSummary>('/admin/summary'),

@@ -26,6 +26,9 @@ export default defineConfig({
       '/reports': 'http://localhost:8000',
       '/me': 'http://localhost:8000',
       '/admin': 'http://localhost:8000',
+      '/grammar': 'http://localhost:8000',
+      '/teacher': 'http://localhost:8000',
+      '/teacher-invites': 'http://localhost:8000',
     },
   },
 });

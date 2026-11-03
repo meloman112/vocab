@@ -264,14 +264,19 @@ async def apply_review(
         await conn.execute(
             "insert into reviews (card_id, rating) values ($1, $2)", card_id, rating
         )
-        await conn.execute(
-            f"update users set streak = {NEW_STREAK},"
-            f" best_streak = greatest(best_streak, {NEW_STREAK}),"
-            f" last_day = (now() at time zone $2)::date"
-            f" where id = $1",
-            user_id,
-            tz,
-        )
+        await touch_streak(conn, user_id, tz)
+
+
+async def touch_streak(conn: asyncpg.Connection, user_id: int, tz: str) -> None:
+    """Сегодня было занятие: повторение слова или задание тетради."""
+    await conn.execute(
+        f"update users set streak = {NEW_STREAK},"
+        f" best_streak = greatest(best_streak, {NEW_STREAK}),"
+        f" last_day = (now() at time zone $2)::date"
+        f" where id = $1",
+        user_id,
+        tz,
+    )
 
 
 async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Record:
@@ -341,16 +346,23 @@ async def leaderboard(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]
     Неделя, а не всё время: иначе первые пользователи навсегда заняли бы
     верх, и новичку не за что было бы бороться.
     """
+    # Решённое задание тетради стоит столько же, сколько повторение слова:
+    # иначе ученики, которые только делают грамматику, в рейтинг не попали бы.
     return await conn.fetch(
         f"""
+        with week as (select date_trunc('week', now() at time zone $1) at time zone $1 as start),
+        activity as (
+          select c.user_id from reviews r join cards c on c.id = r.card_id, week
+          where r.reviewed_at >= week.start
+          union all
+          select g.user_id from grammar_results g, week where g.updated_at >= week.start
+        )
         select u.id as user_id, coalesce(u.name, 'Без имени') as name,
                count(*) * {XP_PER_REVIEW} as xp,
                {LIVE_STREAK} as streak,
                rank() over (order by count(*) desc) as place
-        from reviews r
-        join cards c on c.id = r.card_id
-        join users u on u.id = c.user_id
-        where r.reviewed_at >= date_trunc('week', now() at time zone $1) at time zone $1
+        from activity a
+        join users u on u.id = a.user_id
         group by u.id
         order by place, u.id
         """,
@@ -530,4 +542,238 @@ async def admin_summary(conn: asyncpg.Connection) -> asyncpg.Record:
           (select count(*) from words where banned)                     as banned,
           (select count(distinct word_id) from reports where resolved_at is null) as open_reports
         """
+    )
+
+
+# --- тетрадь ------------------------------------------------------------------
+
+
+async def grammar_results(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "select item, clean, was_wrong, answers from grammar_results where user_id = $1",
+        user_id,
+    )
+
+
+async def grammar_accepted(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+    """Ответы, засчитанные учителями: движок мини-аппа принимает их наравне с ключом."""
+    return await conn.fetch("select item, slot, answer from grammar_accepted")
+
+
+async def save_grammar_attempt(
+    conn: asyncpg.Connection,
+    user_id: int,
+    item: str,
+    clean: bool,
+    answers: list[str],
+    mistakes: list[tuple[int, str, str]],
+    tz: str,
+) -> None:
+    """Итог задания, его ошибки и серия — одной транзакцией: ошибки без
+    итога учитель увидел бы у задания, которого ученик будто не решал."""
+    async with conn.transaction():
+        await conn.execute(
+            """
+            insert into grammar_results (user_id, item, clean, was_wrong, answers)
+            values ($1, $2, $3, not $3, $4)
+            on conflict (user_id, item) do update set
+              clean = excluded.clean,
+              was_wrong = grammar_results.was_wrong or excluded.was_wrong,
+              answers = excluded.answers,
+              updated_at = now()
+            """,
+            user_id, item, clean, answers,
+        )
+        if mistakes:
+            await conn.executemany(
+                "insert into grammar_mistakes (user_id, item, slot, answer, why)"
+                " values ($1, $2, $3, $4, $5)",
+                [(user_id, item, slot, answer, why) for slot, answer, why in mistakes],
+            )
+        await touch_streak(conn, user_id, tz)
+
+
+async def import_grammar(
+    conn: asyncpg.Connection, user_id: int, rows: list[tuple[str, bool, bool, list[str]]]
+) -> int:
+    """Перенос из CloudStorage. Уже решённое в базе не перетирается:
+    база новее любого локального хранилища."""
+    if not rows:
+        return 0
+    # Ответы идут JSON-строками: список списков asyncpg передал бы как
+    # двумерный массив, и unnest разложил бы его не по заданиям.
+    result = await conn.fetch(
+        """
+        insert into grammar_results (user_id, item, clean, was_wrong, answers)
+        select $1, r.item, r.clean, r.was_wrong, r.answers::jsonb
+        from unnest($2::text[], $3::bool[], $4::bool[], $5::text[])
+             as r(item, clean, was_wrong, answers)
+        on conflict (user_id, item) do nothing
+        returning item
+        """,
+        user_id,
+        [r[0] for r in rows],
+        [r[1] for r in rows],
+        [r[2] for r in rows],
+        [json.dumps(r[3], ensure_ascii=False) for r in rows],
+    )
+    return len(result)
+
+
+async def is_teacher(conn: asyncpg.Connection, user_id: int) -> bool:
+    return bool(await conn.fetchval("select is_teacher from users where id = $1", user_id))
+
+
+async def teachers(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "select id as user_id, tg_id, coalesce(name, 'Без имени') as name"
+        " from users where is_teacher order by name"
+    )
+
+
+async def remove_teacher(conn: asyncpg.Connection, user_id: int) -> bool:
+    status = await conn.execute(
+        "update users set is_teacher = false where id = $1 and is_teacher", user_id
+    )
+    return status != "UPDATE 0"
+
+
+async def create_teacher_invite(conn: asyncpg.Connection, user_id: int, code: str) -> None:
+    await conn.execute(
+        "insert into teacher_invites (code, created_by) values ($1, $2)", code, user_id
+    )
+
+
+async def redeem_teacher_invite(
+    conn: asyncpg.Connection, code: str, user_id: int, ttl_days: int
+) -> asyncpg.Record | None:
+    """Гасит приглашение и делает учителем. None — ссылки нет, она занята или
+    просрочена. Возвращает tg_id того, кто приглашал: бот ему сообщит."""
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            """
+            update teacher_invites set used_by = $2, used_at = now()
+            where code = $1 and used_by is null
+              and created_at > now() - make_interval(days => $3)
+            returning (select tg_id from users where id = created_by) as inviter_tg_id
+            """,
+            code, user_id, ttl_days,
+        )
+        if row is not None:
+            await conn.execute("update users set is_teacher = true where id = $1", user_id)
+    return row
+
+
+async def students(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+    """Все, кто делал тетрадь, со сводкой. Неразобранные ошибки — те, что
+    учитель ещё не засчитал, — вверху: с них учитель и начинает."""
+    return await conn.fetch(
+        """
+        with r as (
+          select user_id, count(*) as done,
+                 count(*) filter (where clean and not was_wrong) as first_try,
+                 count(*) filter (where not clean) as wrong_now,
+                 max(updated_at) as last_at
+          from grammar_results group by user_id
+        ),
+        m as (
+          select user_id, count(*) as mistakes,
+                 count(*) filter (where created_at > now() - interval '7 days') as mistakes_week
+          from grammar_mistakes where accepted_by is null group by user_id
+        )
+        select u.id as user_id, coalesce(u.name, 'Без имени') as name,
+               coalesce(r.done, 0) as done, coalesce(r.first_try, 0) as first_try,
+               coalesce(r.wrong_now, 0) as wrong_now,
+               coalesce(m.mistakes, 0) as mistakes, coalesce(m.mistakes_week, 0) as mistakes_week,
+               r.last_at
+        from r join users u on u.id = r.user_id
+        left join m on m.user_id = r.user_id
+        order by r.last_at desc nulls last
+        """
+    )
+
+
+async def student(conn: asyncpg.Connection, user_id: int) -> asyncpg.Record | None:
+    return await conn.fetchrow(
+        "select id as user_id, coalesce(name, 'Без имени') as name from users where id = $1",
+        user_id,
+    )
+
+
+async def student_results(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "select item, clean, was_wrong, answers, updated_at from grammar_results"
+        " where user_id = $1 order by updated_at desc",
+        user_id,
+    )
+
+
+async def student_mistakes(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "select id, item, slot, answer, why, created_at, accepted_by is not null as accepted"
+        " from grammar_mistakes where user_id = $1 order by created_at desc limit 500",
+        user_id,
+    )
+
+
+async def accept_mistake(
+    conn: asyncpg.Connection, mistake_id: int, teacher_id: int
+) -> asyncpg.Record | None:
+    """Ответ ученика верный, ключ его не знал. Ответ становится принятым
+    у всех, а у этого ученика задание перестаёт считаться ошибкой, если
+    неразобранных ошибок в нём больше нет."""
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            "update grammar_mistakes set accepted_by = $2 where id = $1"
+            " returning user_id, item, slot, answer",
+            mistake_id, teacher_id,
+        )
+        if row is None:
+            return None
+        await conn.execute(
+            "insert into grammar_accepted (item, slot, answer, added_by) values ($1, $2, $3, $4)"
+            " on conflict do nothing",
+            row["item"], row["slot"], row["answer"].strip(), teacher_id,
+        )
+        # Та же ошибка у других учеников тоже засчитывается: ответ теперь верный.
+        await conn.execute(
+            "update grammar_mistakes set accepted_by = $4"
+            " where item = $1 and slot = $2 and lower(trim(answer)) = lower(trim($3))"
+            " and accepted_by is null",
+            row["item"], row["slot"], row["answer"], teacher_id,
+        )
+        await conn.execute(
+            """
+            update grammar_results g set clean = true
+            where g.item = $1 and not g.clean and not exists (
+              select 1 from grammar_mistakes m
+              where m.user_id = g.user_id and m.item = g.item and m.accepted_by is null
+            )
+            """,
+            row["item"],
+        )
+    return row
+
+
+async def common_mistakes(conn: asyncpg.Connection, limit: int) -> list[asyncpg.Record]:
+    """Где ошибаются чаще всего — по числу учеников, а не попыток: один
+    упрямый ученик не должен заслонять задание, на котором сыплется класс."""
+    return await conn.fetch(
+        """
+        select item, count(distinct user_id) as students, count(*) as attempts,
+               (array_agg(answer order by created_at desc))[1:5] as answers
+        from grammar_mistakes where accepted_by is null
+        group by item
+        order by students desc, attempts desc
+        limit $1
+        """,
+        limit,
+    )
+
+
+async def grammar_summary(conn: asyncpg.Connection, user_id: int) -> asyncpg.Record:
+    return await conn.fetchrow(
+        "select count(*) as done, count(*) filter (where not clean) as wrong_now"
+        " from grammar_results where user_id = $1",
+        user_id,
     )
