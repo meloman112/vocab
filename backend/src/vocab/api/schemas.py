@@ -2,7 +2,7 @@
 колонка не должна автоматически утечь в ответ."""
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -81,10 +81,19 @@ class AddWordOut(BaseModel):
     entries: list[WordEntry]
 
 
-class LookupOut(BaseModel):
+class TextLookup(BaseModel):
+    """Перевод выделенного предложения целиком — от модели, без карточки."""
+
+    kind: Literal["text"]
+    text: str
+    translation: str
+
+
+class WordLookup(BaseModel):
     """Перевод выделенного слова. Карточка не заводится: saved — есть ли
     она уже, чтобы вместо «Добавить» показать «Уже в твоих словах»."""
 
+    kind: Literal["word"]
     id: int
     lemma: str
     form_note: str | None
@@ -94,6 +103,9 @@ class LookupOut(BaseModel):
     forms: str
     examples: list[Example]
     saved: bool
+
+
+LookupOut = Annotated[WordLookup | TextLookup, Field(discriminator="kind")]
 
 
 class QueueOut(BaseModel):

@@ -93,6 +93,15 @@
   overflow-wrap: anywhere;
 }
 
+/* Выделенное предложение: целиком, но тише перевода. */
+.tr-source {
+  padding-right: 32px;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--tr-muted);
+  overflow-wrap: anywhere;
+}
+
 .tr-pos {
   padding: 2px 8px;
   border-radius: 6px;

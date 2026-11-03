@@ -5,7 +5,16 @@ import json
 
 import pytest
 
-from vocab.enrich import _parse_as, parse_phrases, parse_word
+from vocab.enrich import _parse_as, parse_phrases, parse_translation, parse_word
+
+
+def test_translation_is_trimmed():
+    assert parse_translation('{"translation": "  Я закончил\\n домашнее задание. "}') == "Я закончил домашнее задание."
+
+
+def test_empty_translation_raises():
+    with pytest.raises(ValueError):
+        parse_translation('{"translation": ""}')
 
 FULL = {
     "translation": "идти, ехать",

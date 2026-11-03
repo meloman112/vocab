@@ -24,8 +24,18 @@ export interface Card {
   due: string;
 }
 
-/** Перевод выделенного слова. saved — уже есть в карточках. */
-export interface Lookup {
+/** Перевод выделенного: слово — карточкой из словаря, предложение — моделью. */
+export type Lookup = WordLookup | TextLookup;
+
+export interface TextLookup {
+  kind: 'text';
+  text: string;
+  translation: string;
+}
+
+/** saved — слово уже есть в карточках. */
+export interface WordLookup {
+  kind: 'word';
   id: number;
   lemma: string;
   /** «went — прошедшее время», если выделили не лемму. */

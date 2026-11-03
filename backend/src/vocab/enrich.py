@@ -47,6 +47,15 @@ PHRASES_PROMPT = """\
 Отвечай только JSON-объектом {"phrases": [...]}. Ничего не нашёл — пустой массив.
 """
 
+TRANSLATE_PROMPT = """\
+Ты переводчик для русскоязычного ученика, который учит английский.
+Тебе пришлют английский текст — фразу или предложение из учебника, иногда
+с пропусками (___) или подсказками в скобках. Переведи его на русский
+естественно и точно; пропуски и скобки оставь как есть.
+
+Отвечай только JSON-объектом {"translation": "..."}.
+"""
+
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
 # Локальная Qwen на общем сервере: карточка генерируется ~50 с, а занятый
@@ -166,3 +175,15 @@ def _parse_as(pos: str):
 
 async def find_phrases(cfg: Settings, text: str) -> list[str]:
     return await _ask(cfg, PHRASES_PROMPT, text, parse_phrases)
+
+
+def parse_translation(content: str) -> str:
+    text = " ".join(str(json.loads(content).get("translation") or "").split())
+    if not text:
+        raise ValueError("в ответе модели нет перевода")
+    return text
+
+
+async def translate(cfg: Settings, text: str) -> str:
+    """Перевод фразы или предложения целиком — для выделенного в мини-аппе."""
+    return await _ask(cfg, TRANSLATE_PROMPT, text, parse_translation)

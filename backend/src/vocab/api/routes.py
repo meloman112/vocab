@@ -64,10 +64,11 @@ async def add_word(
 @router.get("/lookup", response_model=schemas.LookupOut)
 async def lookup(
     request: Request,
-    text: str = Query(min_length=1, max_length=60),
+    text: str = Query(min_length=1, max_length=500),
     user_id: int = Depends(current_user),
-) -> schemas.LookupOut:
-    """Перевод выделенного в мини-аппе слова, без заведения карточки."""
+) -> schemas.WordLookup | schemas.TextLookup:
+    """Перевод выделенного в мини-аппе: слово — карточкой из словаря (без
+    заведения карточки у пользователя), предложение — моделью целиком."""
     try:
         entry = await dictionary.lookup(request.app.state.pool, settings(), user_id, text)
     except dictionary.Rejected as exc:
@@ -76,7 +77,9 @@ async def lookup(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "ИИ сейчас не отвечает, попробуй чуть позже."
         ) from exc
-    return schemas.LookupOut(**entry)
+    if entry["kind"] == "text":
+        return schemas.TextLookup(**entry)
+    return schemas.WordLookup(**entry)
 
 
 @router.post("/words/{word_id}/card", status_code=status.HTTP_204_NO_CONTENT)

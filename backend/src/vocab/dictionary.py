@@ -6,8 +6,11 @@
 """
 
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import asyncpg
 
@@ -87,21 +90,51 @@ async def lookup(pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str) -> 
     заводится — её добавляют отдельной кнопкой, если слово стоит учить.
 
     Новое для общего словаря слово так же уходит в модель и остаётся в
-    словаре: второй раз его переведут мгновенно и без лимита."""
-    text = repo.normalize_word(text)
+    словаре: второй раз его переведут мгновенно и без лимита.
+
+    Несколько слов, которых нет в словаре фразой, — предложение: его
+    модель переводит целиком (kind="text"), карточки у такого нет."""
+    raw = " ".join(text.split())
+    text = repo.normalize_word(raw)
     if " " in text:
-        # Фразы ищутся в общем словаре, но не в модели: выделенное
-        # предложение — не фраза, а find_phrases вернул бы из него список.
         async with pool.acquire() as conn:
-            if await repo.get_word(conn, text) is None:
-                raise Rejected("Выдели одно слово — фразы переводятся, только если они есть в словаре.")
+            known = await repo.get_word(conn, text) is not None
+        if not known:
+            return {"kind": "text", "text": raw, "translation": await _translate(cfg, user_id, raw)}
     # as_is: в учебнике опечаток нет, а «может, вы имели в виду» здесь некуда показать.
     item = (await _items(pool, cfg, user_id, text, None, as_is=True))[0]
     word = await _ensure_word(pool, cfg, user_id, item)
     note = item.analysis.note_for(word["pos"]) if item.analysis else None
     async with pool.acquire() as conn:
         saved = await repo.has_card(conn, user_id, word["id"])
-    return {**dict(word), "form_note": f"{text} — {note}" if note else None, "saved": saved}
+    return {"kind": "word", **dict(word), "form_note": f"{text} — {note}" if note else None, "saved": saved}
+
+
+# Одни и те же предложения учебника выделяют многие ученики: перевод
+# запоминается в процессе. Перезапуск его теряет — это не страшно.
+_TRANSLATIONS: OrderedDict[str, str] = OrderedDict()
+_TRANSLATIONS_MAX = 5000
+# Сколько переводов сделал пользователь сегодня: (user_id, дата) → число.
+_TRANSLATED: dict[tuple[int, date], int] = {}
+
+
+async def _translate(cfg: Settings, user_id: int, text: str) -> str:
+    cached = _TRANSLATIONS.get(text)
+    if cached is not None:
+        _TRANSLATIONS.move_to_end(text)
+        return cached
+    today = datetime.now(ZoneInfo(cfg.tz)).date()
+    key = (user_id, today)
+    if _TRANSLATED.get(key, 0) >= cfg.translate_daily_limit:
+        raise Rejected("На сегодня лимит переводов предложений исчерпан. Отдельные слова переводятся как раньше.")
+    for old in [k for k in _TRANSLATED if k[1] != today]:
+        del _TRANSLATED[old]
+    _TRANSLATED[key] = _TRANSLATED.get(key, 0) + 1
+    translation = await enrich.translate(cfg, text)
+    _TRANSLATIONS[text] = translation
+    if len(_TRANSLATIONS) > _TRANSLATIONS_MAX:
+        _TRANSLATIONS.popitem(last=False)
+    return translation
 
 
 def _others(

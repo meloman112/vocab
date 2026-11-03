@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../api/client';
-import type { Lookup } from '../../api/types';
+import type { Lookup, WordLookup } from '../../api/types';
 import { impact, notify } from '../../lib/telegram';
 import './translate.css';
 
@@ -9,7 +9,8 @@ import './translate.css';
 const SETTLE_MS = 300;
 /** После этого под «Перевожу…» объясняем, почему долго: новое слово пишет модель. */
 const SLOW_MS = 2500;
-const MAX_WORDS = 4;
+/** Длиннее — уже абзац: модель переведёт, но читать такое в окошке неудобно. */
+const MAX_CHARS = 400;
 
 type Pill = { text: string; x: number; y: number; below: boolean };
 type Card =
@@ -17,13 +18,24 @@ type Card =
   | { text: string; state: 'ok'; data: Lookup; saving: boolean }
   | { text: string; state: 'error'; message: string };
 
-/** Выделенное — английское слово или короткая фраза? Знаки по краям срезаем: «book,» → book. */
+/** Одно английское слово? Знаки по краям срезаем: «book,» → book. */
 function wordFrom(raw: string): string | null {
-  const text = raw.replace(/[‘’]/g, "'").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '').replace(/\s+/g, ' ');
+  const text = raw.replace(/[‘’]/g, "'").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
   if (!text || text.length > 40) return null;
-  if (!/^[A-Za-z][A-Za-z' -]*$/.test(text)) return null;
-  if (text.split(' ').length > MAX_WORDS) return null;
-  return text;
+  return /^[A-Za-z][A-Za-z'-]*$/.test(text) ? text : null;
+}
+
+/**
+ * Выделенное: слово, фраза или предложение по-английски. У одного слова
+ * края чистим, у предложения оставляем знаки — точка и скобки модели нужны.
+ * Русское (подсказки, задания) не переводим.
+ */
+function textFrom(raw: string): string | null {
+  const text = raw.replace(/[‘’]/g, "'").replace(/\s+/g, ' ').trim();
+  if (!text.includes(' ')) return wordFrom(text);
+  if (text.length > MAX_CHARS || /[А-Яа-яЁё]/.test(text)) return null;
+  const letters = text.replace(/[^A-Za-z]/g, '').length;
+  return letters >= 2 ? text.replace(/^[^A-Za-z(“"']+/, '') : null;
 }
 
 /** Текст выделения, если его можно переводить; поля ввода и само окно не в счёт. */
@@ -33,7 +45,7 @@ function currentSelection(): { text: string; rect: DOMRect } | null {
   const node = sel.anchorNode;
   const el = node instanceof Element ? node : node?.parentElement;
   if (el?.closest(SKIP)) return null;
-  const text = wordFrom(sel.toString());
+  const text = textFrom(sel.toString());
   if (!text) return null;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
   if (!rect.width && !rect.height) return null;
@@ -187,13 +199,13 @@ export function SelectionTranslate() {
   }, [card, close]);
 
   async function save() {
-    if (card?.state !== 'ok') return;
+    if (card?.state !== 'ok' || card.data.kind !== 'word') return;
     const { data } = card;
     setCard({ ...card, saving: true });
     try {
       await api.saveWord(data.id);
       notify('success');
-      setCard((c) => (c?.state === 'ok' ? { ...c, saving: false, data: { ...c.data, saved: true } } : c));
+      setCard((c) => (c?.state === 'ok' && c.data.kind === 'word' ? { ...c, saving: false, data: { ...c.data, saved: true } } : c));
     } catch (e) {
       setCard({ text: card.text, state: 'error', message: (e as Error).message });
     }
@@ -224,20 +236,31 @@ export function SelectionTranslate() {
             </button>
             {card.state === 'loading' && (
               <div className="tr-body">
-                <div className="tr-word">{card.text}</div>
+                <div className={card.text.includes(' ') ? 'tr-source' : 'tr-word'}>{card.text}</div>
                 <div className="tr-muted tr-wait">
                   Перевожу…
-                  {card.slow && <small>Слова ещё нет в словаре — его пишет ИИ, это до минуты. Дальше будет мгновенно.</small>}
+                  {card.slow && !card.text.includes(' ') && (
+                    <small>Слова ещё нет в словаре — его пишет ИИ, это до минуты. Дальше будет мгновенно.</small>
+                  )}
                 </div>
               </div>
             )}
             {card.state === 'error' && (
               <div className="tr-body">
-                <div className="tr-word">{card.text}</div>
+                <div className={card.text.includes(' ') ? 'tr-source' : 'tr-word'}>{card.text}</div>
                 <p className="tr-muted">{card.message}</p>
               </div>
             )}
-            {card.state === 'ok' && <Result data={card.data} saving={card.saving} onSave={save} />}
+            {card.state === 'ok' &&
+              (card.data.kind === 'word' ? (
+                <Result data={card.data} saving={card.saving} onSave={save} />
+              ) : (
+                <div className="tr-body">
+                  <div className="tr-source">{card.data.text}</div>
+                  <div className="tr-translation">{card.data.translation}</div>
+                  <small className="tr-muted">Перевёл ИИ. Слово отсюда — выдели его отдельно, будет с примерами и в карточки.</small>
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -245,7 +268,7 @@ export function SelectionTranslate() {
   );
 }
 
-function Result({ data, saving, onSave }: { data: Lookup; saving: boolean; onSave: () => void }) {
+function Result({ data, saving, onSave }: { data: WordLookup; saving: boolean; onSave: () => void }) {
   const example = data.examples[0];
   return (
     <div className="tr-body">
