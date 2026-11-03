@@ -81,6 +81,21 @@ class AddWordOut(BaseModel):
     entries: list[WordEntry]
 
 
+class LookupOut(BaseModel):
+    """Перевод выделенного слова. Карточка не заводится: saved — есть ли
+    она уже, чтобы вместо «Добавить» показать «Уже в твоих словах»."""
+
+    id: int
+    lemma: str
+    form_note: str | None
+    translation: str
+    ipa: str
+    pos: str
+    forms: str
+    examples: list[Example]
+    saved: bool
+
+
 class QueueOut(BaseModel):
     cards: list[CardOut]
 

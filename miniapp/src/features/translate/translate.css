@@ -1,0 +1,173 @@
+/* Перевод выделенного: кнопка у слова и карточка снизу. Цвета — из темы Telegram. */
+
+:root {
+  --tr-bg: var(--tg-theme-bg-color, #fff);
+  --tr-ink: var(--tg-theme-text-color, #000);
+  --tr-muted: var(--tg-theme-hint-color, #8a8a8e);
+  --tr-accent: var(--tg-theme-button-color, #2481cc);
+  --tr-on-accent: var(--tg-theme-button-text-color, #fff);
+  --tr-soft: color-mix(in srgb, var(--tr-accent) 12%, var(--tr-bg));
+  --tr-ok: #31b545;
+}
+
+.tr-pill {
+  position: fixed;
+  z-index: 70;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 14px/1 var(--tgui--font-family, system-ui);
+  color: var(--tr-on-accent);
+  background: var(--tr-accent);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.2);
+  transform: translateX(-50%);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.tr-pill.up {
+  transform: translate(-50%, -100%);
+}
+
+.tr-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.tr-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px 16px 0 0;
+  color: var(--tr-ink);
+  background: var(--tr-bg);
+  font-family: var(--tgui--font-family, system-ui);
+}
+
+.tr-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  color: var(--tr-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tr-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Место под крестик — только у заголовка, кнопка снизу во всю ширину. */
+.tr-body > .tr-word,
+.tr-head {
+  padding-right: 32px;
+}
+
+.tr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.tr-word {
+  font-size: 22px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tr-pos {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--tr-accent);
+  background: var(--tr-soft);
+}
+
+.tr-muted {
+  margin: 0;
+  font-size: 14px;
+  color: var(--tr-muted);
+}
+
+.tr-note {
+  font-style: italic;
+}
+
+.tr-translation {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tr-example {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  background: var(--tr-soft);
+}
+
+.tr-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tr-wait small {
+  font-size: 13px;
+}
+
+.tr-add {
+  margin-top: 6px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  font: 600 16px/1.2 var(--tgui--font-family, system-ui);
+  color: var(--tr-on-accent);
+  background: var(--tr-accent);
+  cursor: pointer;
+}
+
+.tr-add:disabled {
+  opacity: 0.6;
+}
+
+.tr-saved {
+  margin-top: 6px;
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--tr-ok);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tr-sheet {
+    animation: tr-up 0.2s ease-out;
+  }
+
+  @keyframes tr-up {
+    from {
+      transform: translateY(24px);
+      opacity: 0;
+    }
+  }
+}

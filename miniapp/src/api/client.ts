@@ -8,6 +8,7 @@ import type {
   GrammarContent,
   GrammarProgress,
   Leaderboard,
+  Lookup,
   PdfExercise,
   Student,
   StudentDetail,
@@ -40,8 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Текст ошибки не показываем как есть: там бывает detail от FastAPI,
     // пользователю от него пользы нет. Статус в сообщении — чтобы 401
     // (открыли вне Telegram) отличался от 500. Исключение — 502 от
-    // Telegram при отправке PDF: там detail объясняет, что нажать Start.
-    const detail = response.status === 502 ? ((await response.json().catch(() => null)) as { detail?: unknown } | null)?.detail : null;
+    // Telegram при отправке PDF: там detail объясняет, что нажать Start,
+    // и 422 от перевода — «не знаю такого слова».
+    const detail = response.status === 502 || response.status === 422 ?((await response.json().catch(() => null)) as { detail?: unknown } | null)?.detail : null;
     throw new Error(typeof detail === 'string' ? detail : `Запрос ${path} вернул ${response.status}`);
   }
   // 204 — тела нет, и json() упал бы на пустой строке.
@@ -73,6 +75,11 @@ export const api = {
     send<void>('POST', '/reports', { word_id: wordId, reason }),
 
   me: () => request<Me>('/me'),
+
+  /** Перевод выделенного слова; карточку не заводит. */
+  lookup: (text: string, signal?: AbortSignal) =>
+    request<Lookup>(`/lookup?text=${encodeURIComponent(text)}`, { signal }),
+  saveWord: (wordId: number) => send<void>('POST', `/words/${wordId}/card`),
 
   grammar: {
     content: () => request<GrammarContent>('/grammar/content'),

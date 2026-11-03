@@ -82,6 +82,28 @@ async def add_text(
     return entries
 
 
+async def lookup(pool: asyncpg.Pool, cfg: Settings, user_id: int, text: str) -> dict[str, Any]:
+    """Перевод выделенного в мини-аппе: как add_text, только карточка не
+    заводится — её добавляют отдельной кнопкой, если слово стоит учить.
+
+    Новое для общего словаря слово так же уходит в модель и остаётся в
+    словаре: второй раз его переведут мгновенно и без лимита."""
+    text = repo.normalize_word(text)
+    if " " in text:
+        # Фразы ищутся в общем словаре, но не в модели: выделенное
+        # предложение — не фраза, а find_phrases вернул бы из него список.
+        async with pool.acquire() as conn:
+            if await repo.get_word(conn, text) is None:
+                raise Rejected("Выдели одно слово — фразы переводятся, только если они есть в словаре.")
+    # as_is: в учебнике опечаток нет, а «может, вы имели в виду» здесь некуда показать.
+    item = (await _items(pool, cfg, user_id, text, None, as_is=True))[0]
+    word = await _ensure_word(pool, cfg, user_id, item)
+    note = item.analysis.note_for(word["pos"]) if item.analysis else None
+    async with pool.acquire() as conn:
+        saved = await repo.has_card(conn, user_id, word["id"])
+    return {**dict(word), "form_note": f"{text} — {note}" if note else None, "saved": saved}
+
+
 def _others(
     word: asyncpg.Record, senses: list[asyncpg.Record], parts: tuple[str, ...]
 ) -> list[dict[str, Any]]:

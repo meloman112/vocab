@@ -176,6 +176,20 @@ async def add_card(conn: asyncpg.Connection, user_id: int, word_id: int) -> bool
     return card_id is not None
 
 
+async def has_card(conn: asyncpg.Connection, user_id: int, word_id: int) -> bool:
+    return await conn.fetchval(
+        "select exists(select 1 from cards where user_id = $1 and word_id = $2)",
+        user_id,
+        word_id,
+    )
+
+
+async def word_exists(conn: asyncpg.Connection, word_id: int) -> bool:
+    return await conn.fetchval(
+        "select exists(select 1 from words where id = $1 and not banned)", word_id
+    )
+
+
 async def discover(
     conn: asyncpg.Connection, user_id: int, limit: int
 ) -> list[asyncpg.Record]:

@@ -24,6 +24,20 @@ export interface Card {
   due: string;
 }
 
+/** Перевод выделенного слова. saved — уже есть в карточках. */
+export interface Lookup {
+  id: number;
+  lemma: string;
+  /** «went — прошедшее время», если выделили не лемму. */
+  form_note: string | null;
+  translation: string;
+  ipa: string;
+  pos: string;
+  forms: string;
+  examples: Example[];
+  saved: boolean;
+}
+
 /** Как XP_PER_REVIEW в backend/repo.py: XP — это число повторений × 10. */
 export const XP_PER_REVIEW = 10;
 

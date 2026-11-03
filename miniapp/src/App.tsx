@@ -9,6 +9,7 @@ import { modeById, type ModeId } from './features/quiz/modes';
 import { QuizFlow } from './features/quiz/QuizFlow';
 import { CardsFlow } from './features/review/CardsFlow';
 import { TeacherScreen } from './features/teacher/TeacherScreen';
+import { SelectionTranslate } from './features/translate/SelectionTranslate';
 import { ErrorBoundary } from './lib/errors';
 import { appearance, platform, startScreen, useBackButton } from './lib/telegram';
 
@@ -47,6 +48,11 @@ export function App() {
       <ErrorBoundary key={screen.name}>
         <div hidden={showBoard}>{render()}</div>
         {showBoard && <LeaderboardScreen onBack={closeBoard} />}
+      </ErrorBoundary>
+      {/* Поверх любого экрана: выделил слово — перевод. Своя граница, чтобы
+          сбой перевода не ронял открытый раздел. */}
+      <ErrorBoundary>
+        <SelectionTranslate />
       </ErrorBoundary>
     </AppRoot>
   );

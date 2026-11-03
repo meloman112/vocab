@@ -61,6 +61,35 @@ async def add_word(
     return schemas.AddWordOut(entries=[schemas.WordEntry(**e) for e in entries])
 
 
+@router.get("/lookup", response_model=schemas.LookupOut)
+async def lookup(
+    request: Request,
+    text: str = Query(min_length=1, max_length=60),
+    user_id: int = Depends(current_user),
+) -> schemas.LookupOut:
+    """Перевод выделенного в мини-аппе слова, без заведения карточки."""
+    try:
+        entry = await dictionary.lookup(request.app.state.pool, settings(), user_id, text)
+    except dictionary.Rejected as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except enrich.EnrichError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "ИИ сейчас не отвечает, попробуй чуть позже."
+        ) from exc
+    return schemas.LookupOut(**entry)
+
+
+@router.post("/words/{word_id}/card", status_code=status.HTTP_204_NO_CONTENT)
+async def save_looked_up(
+    word_id: int, request: Request, user_id: int = Depends(current_user)
+) -> None:
+    """«Добавить в мои слова» под переводом выделенного."""
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.word_exists(conn, word_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Нет такого слова")
+        await repo.add_card(conn, user_id, word_id)
+
+
 def _cards_out(rows) -> schemas.QueueOut:
     return schemas.QueueOut(cards=[
         schemas.CardOut(**dict(row), top=lexicon.rank_label(row["zipf"], row["level"]))
