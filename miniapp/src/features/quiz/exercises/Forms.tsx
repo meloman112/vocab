@@ -2,6 +2,7 @@ import { Button, Caption, Input, LargeTitle } from '@telegram-apps/telegram-ui';
 import { type FormEvent, useState } from 'react';
 
 import type { QuizCard, Rating } from '../../../api/types';
+import { celebrate } from '../../../lib/celebrate';
 import { notify } from '../../../lib/telegram';
 import { ALMOST, irregularForms, normalize, RIGHT, WRONG } from '../check';
 import { Feedback } from '../Feedback';
@@ -19,6 +20,7 @@ export function Forms({ card, onDone }: { card: QuizCard; onDone: (results: Resu
     if (checked) return;
     const result = { v2: v2.includes(normalize(past)), v3: v3.includes(normalize(participle)) };
     notify(result.v2 && result.v3 ? 'success' : 'error');
+    if (result.v2 && result.v3) celebrate(event.currentTarget as Element);
     setChecked(result);
   };
 

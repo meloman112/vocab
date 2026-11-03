@@ -2,6 +2,7 @@ import { Caption, Text } from '@telegram-apps/telegram-ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { QuizCard } from '../../../api/types';
+import { celebrate } from '../../../lib/celebrate';
 import { impact, notify } from '../../../lib/telegram';
 import { title } from '../../../lib/word';
 import { RIGHT, WRONG } from '../check';
@@ -45,6 +46,8 @@ export function Pairs({ round, onDone }: { round: QuizCard[]; onDone: (results: 
     setSelected(null);
     if (next.size === round.length) {
       notify('success');
+      // Салют — за раунд без промахов, иначе он ничего не значит.
+      if (missed.size === 0) celebrate();
       const results = round.map((card) => ({ card, rating: missed.has(card.id) ? WRONG : RIGHT }));
       timer.current = window.setTimeout(() => onDone(results), FLASH_MS);
     }

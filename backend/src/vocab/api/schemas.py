@@ -185,6 +185,13 @@ class Report(BaseModel):
     comment: str | None = Field(default=None, max_length=500)
 
 
+class ClientError(BaseModel):
+    message: str = Field(max_length=500)
+    stack: str = Field(default="", max_length=4000)
+    where: str = Field(default="", max_length=200)
+    ua: str = Field(default="", max_length=300)
+
+
 class Me(BaseModel):
     is_admin: bool
     # Учителю в меню показывается «Ученики». Админ — всегда учитель.

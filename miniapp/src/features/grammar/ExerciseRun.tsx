@@ -2,6 +2,7 @@ import { Button } from '@telegram-apps/telegram-ui';
 import { Fragment, useEffect, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { GrammarMistakeIn } from '../../api/types';
+import { celebrate } from '../../lib/celebrate';
 import { impact, notify, useNoVerticalSwipes } from '../../lib/telegram';
 import { capitalizeAt, partsOf, ruleFor, slotsOf } from './book';
 import { bracketLabel, diagnose, norm, type Diagnosis, type Slot } from './engine';
@@ -145,6 +146,8 @@ export function ExerciseRun(props: RunProps) {
   function finish() {
     const clean = s.errors === 0 && !s.shown.some(Boolean);
     notify(clean ? 'success' : 'warning');
+    // Подсмотренный ответ — не победа, салюта за него нет.
+    if (!s.shown.some(Boolean)) celebrate(sheetRef.current?.querySelector('.g-sent'), clean);
     save({ item: key, clean, answers: s.vals.map((v) => v.trim()), mistakes: s.log }).catch((e: Error) => {
       console.error('итог задания не сохранён:', e);
       toast('Не сохранилось — проверь интернет');

@@ -2,6 +2,7 @@ import { Button, Caption, Input, LargeTitle, Text } from '@telegram-apps/telegra
 import { type FormEvent, type ReactNode, useState } from 'react';
 
 import type { QuizCard, Rating } from '../../../api/types';
+import { celebrate } from '../../../lib/celebrate';
 import { notify } from '../../../lib/telegram';
 import { ALMOST, type Answers, type Grade, grade, hint, RIGHT, WRONG } from '../check';
 import { Feedback } from '../Feedback';
@@ -29,6 +30,7 @@ export function Typing({ card, question, caption, accepted, near, onDone }: Prop
     // С подсказкой верный ответ — уже не чистое воспоминание.
     const rating: Rating = hinted ? (Math.min(graded.rating, ALMOST) as Rating) : graded.rating;
     notify(rating === RIGHT ? 'success' : rating === WRONG ? 'error' : 'warning');
+    if (rating === RIGHT) celebrate(event?.currentTarget as Element | undefined);
     setResult({ rating, note: noteFor(graded, hinted, accepted[0]) });
   };
 

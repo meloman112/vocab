@@ -2,6 +2,7 @@ import { Button, Caption, LargeTitle, Text } from '@telegram-apps/telegram-ui';
 import { useEffect, useRef, useState } from 'react';
 
 import type { QuizCard, Rating } from '../../../api/types';
+import { celebrate } from '../../../lib/celebrate';
 import { speak } from '../../../lib/speech';
 import { notify } from '../../../lib/telegram';
 import { POS_HINTS, title } from '../../../lib/word';
@@ -9,8 +10,11 @@ import { ALMOST, RIGHT, WRONG } from '../check';
 import { Feedback } from '../Feedback';
 import type { Result } from '../useQuizSession';
 
-/** Сколько видна зелёная подсветка верного ответа перед следующим вопросом. */
-const ADVANCE_MS = 700;
+/**
+ * Сколько видна зелёная подсветка и салют верного ответа перед следующим
+ * вопросом. 700 мс было мало: ответ мелькал, и верность не читалась.
+ */
+const ADVANCE_MS = 1200;
 
 interface Props {
   card: QuizCard;
@@ -35,7 +39,7 @@ export function Choice({ card, direction, listen = false, onDone }: Props) {
     return () => window.clearTimeout(timer.current);
   }, [card.word, listen]);
 
-  const choose = (option: string) => {
+  const choose = (option: string, button: HTMLElement) => {
     if (picked !== null) return;
     setPicked(option);
     if (option !== correct) {
@@ -44,6 +48,7 @@ export function Choice({ card, direction, listen = false, onDone }: Props) {
       return;
     }
     notify('success');
+    celebrate(button);
     const result = listen && revealed ? ALMOST : RIGHT;
     timer.current = window.setTimeout(() => onDone([{ card, rating: result }]), ADVANCE_MS);
   };
@@ -81,9 +86,12 @@ export function Choice({ card, direction, listen = false, onDone }: Props) {
             type="button"
             className={optionClass(option, picked, correct)}
             disabled={picked !== null}
-            onClick={() => choose(option)}
+            onClick={(e) => choose(option, e.currentTarget)}
           >
-            <Text>{option}</Text>
+            <Text>
+              {picked !== null && option === correct && '✅ '}
+              {option}
+            </Text>
           </button>
         ))}
       </div>

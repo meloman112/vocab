@@ -27,6 +27,7 @@ export default defineConfig({
       '/me': 'http://localhost:8000',
       '/admin': 'http://localhost:8000',
       '/grammar': 'http://localhost:8000',
+      '/client-errors': 'http://localhost:8000',
       '/teacher': 'http://localhost:8000',
       '/teacher-invites': 'http://localhost:8000',
     },

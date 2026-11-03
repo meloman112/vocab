@@ -9,6 +9,7 @@ import { modeById, type ModeId } from './features/quiz/modes';
 import { QuizFlow } from './features/quiz/QuizFlow';
 import { CardsFlow } from './features/review/CardsFlow';
 import { TeacherScreen } from './features/teacher/TeacherScreen';
+import { ErrorBoundary } from './lib/errors';
 import { appearance, platform, startScreen, useBackButton } from './lib/telegram';
 
 type Screen =
@@ -42,8 +43,11 @@ export function App() {
 
   return (
     <AppRoot appearance={appearance} platform={platform}>
-      <div hidden={showBoard}>{render()}</div>
-      {showBoard && <LeaderboardScreen onBack={closeBoard} />}
+      {/* key — экран: ошибка одного раздела не держит сломанным остальные. */}
+      <ErrorBoundary key={screen.name}>
+        <div hidden={showBoard}>{render()}</div>
+        {showBoard && <LeaderboardScreen onBack={closeBoard} />}
+      </ErrorBoundary>
     </AppRoot>
   );
 

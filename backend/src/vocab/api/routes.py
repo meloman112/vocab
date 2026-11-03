@@ -1,5 +1,6 @@
 """Ручки. Транспортный слой: разбор запроса, вызов repo, сборка DTO."""
 
+import logging
 import random
 from typing import Literal
 
@@ -11,6 +12,7 @@ from . import schemas
 from .auth import Identity, admin_user, current_user, identity, service_only
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 FORECAST_DAYS = 7
 # Сколько новых слов из общего словаря выдаётся за одно «Давай».
@@ -141,6 +143,16 @@ async def post_report(
     async with request.app.state.pool.acquire() as conn:
         if not await repo.report(conn, user_id, body.word_id, body.reason, comment):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "такого слова в словаре нет")
+
+
+@router.post("/client-errors", status_code=status.HTTP_204_NO_CONTENT)
+async def client_error(body: schemas.ClientError, who: Identity = Depends(identity)) -> None:
+    """Падение мини-аппа у пользователя — в лог API. Только от своих
+    (initData или токен), чтобы лог не забивали снаружи."""
+    log.warning(
+        "мини-апп упал у %s (%s): %s\n%s\nUA: %s",
+        who.tg_id, body.where, body.message, body.stack, body.ua,
+    )
 
 
 @router.get("/me", response_model=schemas.Me)
