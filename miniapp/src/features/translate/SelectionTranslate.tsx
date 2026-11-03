@@ -32,12 +32,56 @@ function currentSelection(): { text: string; rect: DOMRect } | null {
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
   const node = sel.anchorNode;
   const el = node instanceof Element ? node : node?.parentElement;
-  if (el?.closest('input, textarea, [contenteditable], .tr-sheet, .tr-pill')) return null;
+  if (el?.closest(SKIP)) return null;
   const text = wordFrom(sel.toString());
   if (!text) return null;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
   if (!rect.width && !rect.height) return null;
   return { text, rect };
+}
+
+const SKIP = 'input, textarea, [contenteditable], .tr-sheet, .tr-pill';
+const LETTER = /[A-Za-z'’-]/;
+
+/** Слово под курсором — для правой кнопки без выделения. */
+function wordAt(x: number, y: number): string | null {
+  const d = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  let node: Node | null = null;
+  let offset = 0;
+  if (d.caretPositionFromPoint) {
+    const p = d.caretPositionFromPoint(x, y);
+    node = p?.offsetNode ?? null;
+    offset = p?.offset ?? 0;
+  } else if (d.caretRangeFromPoint) {
+    const r = d.caretRangeFromPoint(x, y);
+    node = r?.startContainer ?? null;
+    offset = r?.startOffset ?? 0;
+  }
+  if (!node || node.nodeType !== Node.TEXT_NODE || node.parentElement?.closest(SKIP)) return null;
+  const text = (node as Text).data;
+  let start = offset;
+  let end = offset;
+  while (start > 0 && LETTER.test(text[start - 1]!)) start--;
+  while (end < text.length && LETTER.test(text[end]!)) end++;
+  if (start === end) return null;
+  // Каретка прилипает к ближайшему тексту: клик в пустоту рядом со словом — не по слову.
+  const range = document.createRange();
+  range.setStart(node, start);
+  range.setEnd(node, end);
+  const rect = range.getBoundingClientRect();
+  if (x < rect.left - 2 || x > rect.right + 2 || y < rect.top - 2 || y > rect.bottom + 2) return null;
+  return wordFrom(text.slice(start, end));
+}
+
+/** Правый клик: по выделению — выделенное, иначе слово под курсором. */
+function targetAt(x: number, y: number): string | null {
+  const s = currentSelection();
+  if (s && x >= s.rect.left - 4 && x <= s.rect.right + 4 && y >= s.rect.top - 4 && y <= s.rect.bottom + 4) {
+    return s.text;
+  }
+  return wordAt(x, y);
 }
 
 /**
@@ -94,20 +138,38 @@ export function SelectionTranslate() {
         setPill({ text: s.text, x, y: below ? s.rect.bottom + 8 : s.rect.top - 8, below });
       }, SETTLE_MS);
     };
-    const onContext = (e: MouseEvent) => {
-      const s = currentSelection();
-      if (!s) return;
+    // Правая кнопка ловится на pointerdown: Telegram Desktop глушит своё
+    // контекстное меню, и contextmenu до страницы доходит не всегда.
+    // contextmenu остаётся запасным путём и гасит меню браузера.
+    let rightAt = 0;
+    const onPointer = (e: PointerEvent) => {
+      if (e.button !== 2) return;
+      const text = targetAt(e.clientX, e.clientY);
+      if (!text) return;
+      rightAt = Date.now();
       e.preventDefault();
-      open(s.text);
+      open(text);
+    };
+    const onContext = (e: MouseEvent) => {
+      if (Date.now() - rightAt < 1000) {
+        e.preventDefault();
+        return;
+      }
+      const text = targetAt(e.clientX, e.clientY);
+      if (!text) return;
+      e.preventDefault();
+      open(text);
     };
     // Прокрутили — кнопка осталась бы висеть в стороне от слова.
     const onScroll = () => setPill(null);
     document.addEventListener('selectionchange', onChange);
+    document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('contextmenu', onContext);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       clearTimeout(timer);
       document.removeEventListener('selectionchange', onChange);
+      document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('contextmenu', onContext);
       window.removeEventListener('scroll', onScroll);
     };
