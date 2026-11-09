@@ -70,6 +70,12 @@ export function CardFace({ card, flipped, onFlip }: Props) {
           <Caption className="card__pos">
             ⭐ {card.top} · учат: {card.learners}
           </Caption>
+          {card.deck && (
+            <Caption className="card__pos">
+              📘 {card.deck}
+              {card.topic && ` · ${card.topic}`}
+            </Caption>
+          )}
           <ReportButton wordId={card.word_id} />
         </div>
       )}

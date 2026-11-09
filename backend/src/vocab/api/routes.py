@@ -179,6 +179,7 @@ async def get_quiz(
         cards.append(schemas.QuizCard(
             **dict(row),
             top=lexicon.rank_label(row["zipf"], row["level"]),
+            remembered_due=srs.review(row, srs.REMEMBERED)["due"],
             choices_ru=quiz.choices(row, pool, "translation", rng),
             choices_en=quiz.choices(row, pool, "lemma", rng),
             cloze=gap,
@@ -278,10 +279,12 @@ async def get_stats(
         row = await repo.stats(conn, user_id, tz)
         days = await repo.forecast(conn, user_id, tz, FORECAST_DAYS)
         streak = await repo.streak(conn, user_id, tz)
+        decks = await repo.deck_progress(conn, user_id)
 
     return schemas.StatsOut(
         **dict(row),
         **dict(streak),
+        decks=[schemas.DeckProgress(**dict(d)) for d in decks],
         forecast=[schemas.ForecastDay(day=d["day"], count=d["count"]) for d in days],
     )
 

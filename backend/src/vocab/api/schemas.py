@@ -46,6 +46,9 @@ class CardOut(BaseModel):
     # Когда карточка вернётся, если нажать «Помню»: подпись под кнопкой
     # говорит, что будет, а не заставляет гадать.
     remembered_due: datetime
+    # Набор учителя и тема из его файла — метка «📘 …» на обороте.
+    deck: str | None
+    topic: str | None
     due: datetime
 
 
@@ -126,6 +129,12 @@ class ForecastDay(BaseModel):
     count: int
 
 
+class DeckProgress(BaseModel):
+    deck: str
+    total: int
+    learned: int
+
+
 class StatsOut(BaseModel):
     total: int
     learned: int
@@ -135,6 +144,7 @@ class StatsOut(BaseModel):
     # Дней подряд с повторением; пропущенный день — уже 0.
     streak: int
     best_streak: int
+    decks: list[DeckProgress]
 
 
 class LeaderRow(BaseModel):

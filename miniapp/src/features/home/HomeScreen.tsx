@@ -64,6 +64,17 @@ export function HomeScreen({ onGrammar, onTeacher, onCards, onQuiz, onLeaderboar
           >
             Карточки
           </Cell>
+          {/* Наборы — не выбор, а прогресс: новые слова и так идут из них первыми. */}
+          {header?.stats.decks.map((deck) => (
+            <Cell
+              key={deck.deck}
+              before={<Icon>📘</Icon>}
+              subtitle={`Изучено ${deck.learned} из ${deck.total}`}
+              multiline
+            >
+              {deck.deck}
+            </Cell>
+          ))}
         </Section>
 
         <Section header="Тесты" footer="Ответ в тесте засчитывается как повторение: ошибся — слово вернётся скорее.">

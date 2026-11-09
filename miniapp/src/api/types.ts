@@ -23,6 +23,9 @@ export interface Card {
   homonym: boolean;
   /** Когда карточка вернётся, если нажать «Помню». */
   remembered_due: string;
+  /** Набор учителя и тема из его файла; у остальных слов null. */
+  deck: string | null;
+  topic: string | null;
   due: string;
 }
 
@@ -53,8 +56,15 @@ export interface WordLookup {
 /** Как XP_PER_REVIEW в backend/repo.py: XP — это число повторений × 10. */
 export const XP_PER_REVIEW = 10;
 
+export interface DeckProgress {
+  deck: string;
+  total: number;
+  learned: number;
+}
+
 export interface Stats {
   due_now: number;
+  decks: DeckProgress[];
   /** Дней подряд с повторением; пропущенный день — уже 0. */
   streak: number;
   best_streak: number;

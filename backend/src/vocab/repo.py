@@ -9,7 +9,7 @@ import asyncpg
 # явный, чтобы select * не начал утекать в ответ API с новой колонкой.
 CARD_SELECT = """
     select c.id, w.id as word_id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
-           w.irregular, w.examples, w.zipf, w.level,
+           w.irregular, w.examples, w.zipf, w.level, w.deck, w.topic,
            (select count(*) from cards l where l.word_id = w.id) as learners,
            exists (select 1 from words o where o.lemma = w.lemma and o.id <> w.id) as homonym,
            c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
@@ -194,9 +194,10 @@ async def discover(
     conn: asyncpg.Connection, user_id: int, limit: int
 ) -> list[asyncpg.Record]:
     """Берёт из общего словаря слова, которых у пользователя нет, и сразу
-    заводит на них карточки: сначала знаменательные, среди них — уровень
-    A1 раньше A2, внутри уровня — те, что учат больше людей, потом самые
-    частые в языке.
+    заводит на них карточки: сначала наборы учителя в порядке файла
+    (B1 3000 words, потом глаголы с предлогами), затем знаменательные,
+    среди них — уровень A1 раньше A2, внутри уровня — те, что учат больше
+    людей, потом самые частые в языке.
 
     Пока пользователей мало, популярность у всех одинаковая и порядок
     фактически задаёт частота.
@@ -209,7 +210,8 @@ async def discover(
           and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)
         -- Служебные слова в конец: the, of, you знает любой начинающий, и
         -- первая же выдача из них отбила бы желание продолжать.
-        order by w.pos in ('determiner', 'preposition', 'pronoun', 'conjunction',
+        order by w.deck_order nulls last,
+                 w.pos in ('determiner', 'preposition', 'pronoun', 'conjunction',
                            'modal', 'interjection', 'numeral', 'article', 'particle'),
                  w.level nulls last,
                  (select count(*) from cards c where c.word_id = w.id) desc,
@@ -327,6 +329,22 @@ async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Reco
         """,
         user_id,
         tz,
+    )
+
+
+async def deck_progress(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
+    """Сколько слов каждого набора выучено: Review или «знаю», как в stats."""
+    return await conn.fetch(
+        """
+        select w.deck, count(*) as total,
+               count(c.id) filter (where c.state = 2 or c.known_at is not null) as learned
+        from words w
+        left join cards c on c.word_id = w.id and c.user_id = $1
+        where w.deck is not null and not w.banned
+        group by w.deck
+        order by min(w.deck_order)
+        """,
+        user_id,
     )
 
 
