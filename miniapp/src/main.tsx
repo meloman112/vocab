@@ -1,28 +1,11 @@
-import '@telegram-apps/telegram-ui/dist/styles.css';
-import './styles.css';
+import { initData } from './lib/telegram';
 
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-
-import { App } from './App';
-import { installErrorReporting } from './lib/errors';
-import { initData, initTelegram } from './lib/telegram';
-
-// ready() до первого рендера: пока он не вызван, клиент держит поверх
-// мини-аппа собственный лоадер.
-initTelegram();
-installErrorReporting();
-
-const root = document.getElementById('root');
-if (!root) throw new Error('нет #root в index.html');
-
-// Вне Telegram API всё равно ответит отказом: незачем рисовать пустой экран.
-if (!initData) {
-  root.textContent = 'Откройте мини-апп через бота в Telegram.';
+// Вне Telegram страница притворяется стандартным 404 nginx: снаружи не
+// должно быть видно, что здесь приложение. Код и стили мини-аппа лежат в
+// отдельном чанке и без initData даже не скачиваются.
+if (initData) {
+  void import('./boot');
 } else {
-  createRoot(root).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
+  document.title = '404 Not Found';
+  document.body.innerHTML = '<center><h1>404 Not Found</h1></center><hr><center>nginx</center>';
 }
