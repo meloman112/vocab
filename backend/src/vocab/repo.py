@@ -242,8 +242,8 @@ async def queue(
     conn: asyncpg.Connection, user_id: int, limit: int
 ) -> list[asyncpg.Record]:
     return await conn.fetch(
-        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and c.due <= now()"
-        f" order by c.due limit $2",
+        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and c.known_at is null"
+        f" and c.due <= now() order by c.due limit $2",
         user_id,
         limit,
     )
@@ -281,6 +281,18 @@ async def apply_review(
         await touch_streak(conn, user_id, tz)
 
 
+async def set_known(conn: asyncpg.Connection, user_id: int, card_id: int, known: bool) -> bool:
+    """Ставит или снимает «знаю». False — карточки нет или она чужая."""
+    result = await conn.execute(
+        "update cards set known_at = case when $3 then now() end"
+        " where id = $1 and user_id = $2",
+        card_id,
+        user_id,
+        known,
+    )
+    return result != "UPDATE 0"
+
+
 async def touch_streak(conn: asyncpg.Connection, user_id: int, tz: str) -> None:
     """Сегодня было занятие: повторение слова или задание тетради."""
     await conn.execute(
@@ -297,17 +309,18 @@ async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Reco
     """Сводка одним запросом.
 
     «Выучено» — карточки в состоянии Review (state = 2): из обучения они
-    вышли, шаги пройдены. Порог по stability сюда не годится — он зависит
+    вышли, шаги пройдены. Плюс отмеченные «знаю»: их не повторяют вовсе. Порог по stability сюда не годится — он зависит
     от параметров FSRS и менялся бы при их дообучении.
     """
     return await conn.fetchrow(
         f"""
         select
           count(*)                                   as total,
-          count(*) filter (where c.state = 2)        as learned,
-          count(*) filter (where c.due <= now())     as due_now,
+          count(*) filter (where c.state = 2 or c.known_at is not null) as learned,
+          count(*) filter (where c.known_at is null and c.due <= now()) as due_now,
           count(*) filter (
-            where c.due < (date_trunc('day', now() at time zone $2) + interval '1 day')
+            where c.known_at is null
+              and c.due < (date_trunc('day', now() at time zone $2) + interval '1 day')
                           at time zone $2
           )                                          as due_today
         from {USER_CARDS}
@@ -334,7 +347,9 @@ async def forecast(
             interval '1 day'
           )::date as day
         ),
-        due as (select (c.due at time zone $2)::date as day from {USER_CARDS})
+        due as (
+          select (c.due at time zone $2)::date as day from {USER_CARDS} and c.known_at is null
+        )
         select days.day, count(due.day) as count
         from days left join due on due.day = days.day
         group by days.day
@@ -394,7 +409,9 @@ async def reminder_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Re
         """
         select u.tg_id, u.streak,
                (now() at time zone $1)::date - u.last_day as gap,
-               count(c.id) filter (where c.due <= now() and not w.banned) as due
+               count(c.id) filter (
+                 where c.due <= now() and not w.banned and c.known_at is null
+               ) as due
         from users u
         join cards c on c.user_id = u.id
         join words w on w.id = c.word_id
@@ -449,7 +466,8 @@ async def quiz_cards(
     """Сначала то, что пора повторять, потом то, что подойдёт раньше всего:
     тест засчитывается как повторение, и раньше срока FSRS это учитывает."""
     return await conn.fetch(
-        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and {QUIZ_FILTERS[mode]}"
+        f"{CARD_SELECT} where c.user_id = $1 and not w.banned and c.known_at is null"
+        f" and {QUIZ_FILTERS[mode]}"
         f" order by c.due limit $2",
         user_id,
         limit,

@@ -21,6 +21,7 @@ export type SessionAction =
   | { type: 'failed'; error: string }
   | { type: 'flip' }
   | { type: 'rate'; rating: Rating }
+  | { type: 'known' }
   | { type: 'syncError' };
 
 export const initialState: SessionState = {
@@ -51,20 +52,25 @@ export function reducer(state: SessionState, action: SessionAction): SessionStat
     case 'flip':
       return { ...state, flipped: true };
 
-    case 'rate': {
-      const index = state.index + 1;
-      return {
-        ...state,
-        // Карточка меняется сразу, не дожидаясь ответа сервера: пауза на
-        // каждой оценке — единственное, что делает повторение утомительным.
-        phase: index >= state.cards.length ? 'done' : 'review',
-        index,
-        flipped: false,
-        lapses: state.lapses + (action.rating === 1 ? 1 : 0),
-      };
-    }
+    case 'rate':
+      return { ...next(state), lapses: state.lapses + (action.rating === 1 ? 1 : 0) };
+
+    case 'known':
+      return next(state);
 
     case 'syncError':
       return { ...state, syncErrors: state.syncErrors + 1 };
   }
+}
+
+/** Следующая карточка. Меняется сразу, не дожидаясь ответа сервера: пауза
+ * на каждой оценке — единственное, что делает повторение утомительным. */
+function next(state: SessionState): SessionState {
+  const index = state.index + 1;
+  return {
+    ...state,
+    phase: index >= state.cards.length ? 'done' : 'review',
+    index,
+    flipped: false,
+  };
 }

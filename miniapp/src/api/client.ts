@@ -64,6 +64,10 @@ export const api = {
   review: (cardId: number, rating: Rating) =>
     send<ReviewResult>('POST', '/review', { card_id: cardId, rating }),
 
+  known: (cardId: number) => send<void>('PUT', `/cards/${cardId}/known`),
+
+  unknown: (cardId: number) => send<void>('DELETE', `/cards/${cardId}/known`),
+
   quiz: (mode: QuizSource, limit: number) =>
     request<{ cards: QuizCard[] }>(`/quiz?mode=${mode}&limit=${limit}`),
 

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { api } from '../../api/client';
-import type { Rating } from '../../api/types';
+import type { Card, Rating } from '../../api/types';
 import { impact, notify } from '../../lib/telegram';
 import { initialState, reducer } from './session';
 
 export function useReviewSession() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Последняя карточка, отмеченная «Знаю», пока висит предложение отменить.
+  const [known, setKnown] = useState<Card | null>(null);
   // Оценки уходят фоном; итог сессии ждёт их, иначе серия и XP на экране
   // «Готово» отставали бы на последнюю карточку.
   const pending = useRef<Promise<unknown>[]>([]);
@@ -56,7 +58,34 @@ export function useReviewSession() {
     [state.cards, state.index],
   );
 
+  const markKnown = useCallback(() => {
+    const card = state.cards[state.index];
+    if (!card) return;
+
+    impact('light');
+    dispatch({ type: 'known' });
+    setKnown(card);
+    pending.current.push(api.known(card.id).catch(() => {
+      notify('error');
+      dispatch({ type: 'syncError' });
+    }));
+  }, [state.cards, state.index]);
+
+  // Отмена только снимает отметку: в эту сессию карточка не вернётся, но
+  // её расписание не трогали, и она придёт в свой срок.
+  const undoKnown = useCallback(() => {
+    if (!known) return;
+    setKnown(null);
+    pending.current.push(api.unknown(known.id).catch(() => {
+      notify('error');
+      dispatch({ type: 'syncError' });
+    }));
+  }, [known]);
+
   const settled = useCallback(() => Promise.all(pending.current), []);
 
-  return { state, flip, rate, reload: load, learnNew, settled } as const;
+  return {
+    state, flip, rate, markKnown, known, undoKnown, dismissKnown: () => setKnown(null),
+    reload: load, learnNew, settled,
+  } as const;
 }

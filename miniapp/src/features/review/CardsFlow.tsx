@@ -1,12 +1,40 @@
-import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
+import { Button, Placeholder, Snackbar, Spinner } from '@telegram-apps/telegram-ui';
 
 import { ReviewScreen } from './ReviewScreen';
 import { SessionSummary } from './SessionSummary';
 import { useReviewSession } from './useReviewSession';
 
-/** Повторение карточками с самооценкой Again…Easy. */
+/** Повторение карточками: «Не помню», «Помню», «Знаю». */
 export function CardsFlow({ onLeaderboard }: { onLeaderboard: () => void }) {
-  const { state, flip, rate, reload, learnNew, settled } = useReviewSession();
+  const session = useReviewSession();
+  const { known, undoKnown, dismissKnown } = session;
+  return (
+    <>
+      <Phase session={session} onLeaderboard={onLeaderboard} />
+      {/* Случайное «Знаю» иначе не исправить: слово просто исчезло бы. */}
+      {known && (
+        <Snackbar
+          key={known.id}
+          duration={5000}
+          onClose={dismissKnown}
+          description="больше не покажу"
+          after={<Snackbar.Button onClick={undoKnown}>Отменить</Snackbar.Button>}
+        >
+          {known.word}
+        </Snackbar>
+      )}
+    </>
+  );
+}
+
+function Phase({
+  session,
+  onLeaderboard,
+}: {
+  session: ReturnType<typeof useReviewSession>;
+  onLeaderboard: () => void;
+}) {
+  const { state, flip, rate, markKnown, reload, learnNew, settled } = session;
 
   switch (state.phase) {
     case 'loading':
@@ -58,6 +86,7 @@ export function CardsFlow({ onLeaderboard }: { onLeaderboard: () => void }) {
           flipped={state.flipped}
           onFlip={flip}
           onRate={rate}
+          onKnown={markKnown}
         />
       );
     }

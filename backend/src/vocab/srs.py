@@ -10,6 +10,10 @@ from fsrs import Card, Rating, Scheduler, State
 # история и её можно будет прогнать через fsrs.Optimizer.
 _scheduler = Scheduler()
 
+# Мини-апп ставит только Again и Good: Hard и Easy почти не нажимали, а
+# FSRS с двумя оценками работает штатно. Тесты по-прежнему ставят любую.
+REMEMBERED = Rating.Good
+
 # Колонки cards, которые целиком принадлежат FSRS.
 FSRS_COLUMNS = ("state", "step", "stability", "difficulty", "due", "last_review")
 

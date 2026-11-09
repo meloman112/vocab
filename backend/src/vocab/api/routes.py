@@ -95,7 +95,11 @@ async def save_looked_up(
 
 def _cards_out(rows) -> schemas.QueueOut:
     return schemas.QueueOut(cards=[
-        schemas.CardOut(**dict(row), top=lexicon.rank_label(row["zipf"], row["level"]))
+        schemas.CardOut(
+            **dict(row),
+            top=lexicon.rank_label(row["zipf"], row["level"]),
+            remembered_due=srs.review(row, srs.REMEMBERED)["due"],
+        )
         for row in rows
     ])
 
@@ -135,6 +139,22 @@ async def post_review(
     return schemas.ReviewOut(
         card_id=body.card_id, due=updated["due"], state=updated["state"]
     )
+
+
+@router.put("/cards/{card_id}/known", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_known(card_id: int, request: Request, user_id: int = Depends(current_user)) -> None:
+    await _set_known(request, user_id, card_id, True)
+
+
+@router.delete("/cards/{card_id}/known", status_code=status.HTTP_204_NO_CONTENT)
+async def unmark_known(card_id: int, request: Request, user_id: int = Depends(current_user)) -> None:
+    await _set_known(request, user_id, card_id, False)
+
+
+async def _set_known(request: Request, user_id: int, card_id: int, known: bool) -> None:
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.set_known(conn, user_id, card_id, known):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "карточка не найдена")
 
 
 @router.get("/quiz", response_model=schemas.QuizOut)

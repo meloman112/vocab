@@ -21,6 +21,8 @@ export interface Card {
   learners: number;
   /** У леммы есть другие части речи (a book / to book). */
   homonym: boolean;
+  /** Когда карточка вернётся, если нажать «Помню». */
+  remembered_due: string;
   due: string;
 }
 

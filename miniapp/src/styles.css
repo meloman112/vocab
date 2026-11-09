@@ -96,8 +96,15 @@ body {
 
 .ratings {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
+}
+
+.rating__hint {
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+  color: var(--tg-theme-hint-color, #8a8a8e);
 }
 
 /* Кнопки под текстом Placeholder: главная и второстепенная столбиком. */

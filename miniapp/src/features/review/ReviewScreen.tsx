@@ -11,9 +11,10 @@ interface Props {
   flipped: boolean;
   onFlip: () => void;
   onRate: (rating: Rating) => void;
+  onKnown: () => void;
 }
 
-export function ReviewScreen({ card, index, total, flipped, onFlip, onRate }: Props) {
+export function ReviewScreen({ card, index, total, flipped, onFlip, onRate, onKnown }: Props) {
   return (
     <div className="screen">
       <header className="screen__head">
@@ -28,9 +29,9 @@ export function ReviewScreen({ card, index, total, flipped, onFlip, onRate }: Pr
       </main>
 
       <footer className="screen__foot">
-        {/* Оценивать можно только перевёрнутую карточку: иначе оценка
-            «Good» ставится вслепую и портит расписание. */}
-        <RatingBar disabled={!flipped} onRate={onRate} />
+        {/* Оценивать можно только перевёрнутую карточку: иначе «Помню»
+            ставится вслепую и портит расписание. */}
+        <RatingBar card={card} disabled={!flipped} onRate={onRate} onKnown={onKnown} />
       </footer>
     </div>
   );

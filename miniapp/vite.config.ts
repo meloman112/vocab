@@ -30,6 +30,7 @@ export default defineConfig({
       '/client-errors': 'http://localhost:8000',
       '/teacher': 'http://localhost:8000',
       '/teacher-invites': 'http://localhost:8000',
+      '/cards': 'http://localhost:8000',
     },
   },
 });
