@@ -1,4 +1,6 @@
 import type { Card, Rating } from '../../api/types';
+import { shuffle } from '../../lib/shuffle';
+import { irregularForms } from '../../lib/word';
 
 /**
  * Оценка FSRS из ответа: тест ставит её сам, вместо кнопок Again…Easy.
@@ -58,14 +60,22 @@ export function acceptedWords(card: Card): Answers {
   return card.pos === 'verb' ? [card.word, `to ${card.word}`] : [card.word];
 }
 
-/** «go · went · gone» → варианты V2 и V3; «learned/learnt» — оба верны. */
-export function irregularForms(forms: string): { v2: string[]; v3: string[] } {
-  const [, v2 = '', v3 = ''] = forms.split('·').map((part) => part.trim());
-  const variants = (part: string) => part.split('/').map((v) => v.trim()).filter(Boolean);
-  return { v2: variants(v2), v3: variants(v3) };
-}
-
 /** «h _ _ _» — подсказка: первая буква и длина. */
 export function hint(word: string): string {
   return [...word].map((char, i) => (i === 0 || char === ' ' ? char : '_')).join(' ');
+}
+
+/** Типичные ошибки — неверные варианты: правильное -ed (singed) и соседняя форма. */
+function regular(verb: string): string {
+  return verb.endsWith('e') ? `${verb}d` : `${verb}ed`;
+}
+
+/** sing, V2 → sang среди sung, sing, singed. */
+export function formOptions(lemma: string, forms: string, ask: 'v2' | 'v3'): { correct: string; options: string[] } {
+  const all = irregularForms(forms);
+  const right = all[ask];
+  const correct = right[0]!;
+  const other = ask === 'v2' ? all.v3 : all.v2;
+  const wrong = [...other, lemma, regular(lemma), regular(correct)].filter((option) => !right.includes(option));
+  return { correct, options: shuffle([correct, ...[...new Set(wrong)].slice(0, 3)]) };
 }

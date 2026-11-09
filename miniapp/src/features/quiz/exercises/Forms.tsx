@@ -4,7 +4,8 @@ import { type FormEvent, useState } from 'react';
 import type { QuizCard, Rating } from '../../../api/types';
 import { celebrate } from '../../../lib/celebrate';
 import { notify } from '../../../lib/telegram';
-import { ALMOST, irregularForms, normalize, RIGHT, WRONG } from '../check';
+import { irregularForms } from '../../../lib/word';
+import { ALMOST, normalize, RIGHT, WRONG } from '../check';
 import { Feedback } from '../Feedback';
 import type { Result } from '../useQuizSession';
 

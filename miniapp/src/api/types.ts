@@ -26,6 +26,8 @@ export interface Card {
   /** Набор учителя и тема из его файла; у остальных слов null. */
   deck: string | null;
   topic: string | null;
+  /** FSRS: 1 — учится, 2 — выучено, 3 — переучивается. */
+  state: number;
   due: string;
 }
 

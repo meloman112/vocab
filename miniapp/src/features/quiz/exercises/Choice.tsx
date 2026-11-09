@@ -14,7 +14,7 @@ import type { Result } from '../useQuizSession';
  * Сколько видна зелёная подсветка и салют верного ответа перед следующим
  * вопросом. 700 мс было мало: ответ мелькал, и верность не читалась.
  */
-const ADVANCE_MS = 1200;
+export const ADVANCE_MS = 1200;
 
 interface Props {
   card: QuizCard;
@@ -103,7 +103,7 @@ export function Choice({ card, direction, listen = false, onDone }: Props) {
   );
 }
 
-function optionClass(option: string, picked: string | null, correct: string): string {
+export function optionClass(option: string, picked: string | null, correct: string): string {
   if (picked === null) return 'option';
   if (option === correct) return 'option option--right';
   if (option === picked) return 'option option--wrong';

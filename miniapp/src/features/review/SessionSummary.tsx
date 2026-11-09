@@ -12,6 +12,8 @@ interface Props {
   settled: () => Promise<unknown>;
   onRestart: () => void;
   onLeaderboard: () => void;
+  /** Сразу после новых неправильных глаголов — тест на их формы. */
+  onDrill?: () => void;
 }
 
 interface Progress {
@@ -26,6 +28,7 @@ export function SessionSummary({
   settled,
   onRestart,
   onLeaderboard,
+  onDrill,
 }: Props) {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [progressError, setProgressError] = useState('');
@@ -57,7 +60,12 @@ export function SessionSummary({
       className="screen"
       action={
         <div className="actions">
-          <Button size="l" mode="filled" onClick={onRestart}>
+          {onDrill && (
+            <Button size="l" mode="filled" onClick={onDrill}>
+              ⚡ Закрепить формы
+            </Button>
+          )}
+          <Button size="l" mode={onDrill ? 'bezeled' : 'filled'} onClick={onRestart}>
             Ещё
           </Button>
           <Button size="l" mode="plain" onClick={onLeaderboard}>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../api/client';
 import type { GrammarResult, TopicData } from '../../api/types';
+import { shuffle } from '../../lib/shuffle';
 import { useBackButton } from '../../lib/telegram';
 import { pdfExercises, type Book, type Exercise } from './book';
 import { ExerciseRun } from './ExerciseRun';
@@ -15,10 +16,6 @@ type View =
   | { name: 'home' }
   | { name: 'topic'; id: string }
   | { name: 'run'; keys: string[]; title: string; review: boolean; back: View; nonce: number };
-
-function shuffle<T>(a: T[]): T[] {
-  return a.map((x) => [Math.random(), x] as const).sort((p, q) => p[0] - q[0]).map(([, x]) => x);
-}
 
 /** Тетрадь: темы → упражнения → задания по одному, итоги и работа над ошибками. */
 export function GrammarScreen({ onExit }: { onExit: () => void }) {

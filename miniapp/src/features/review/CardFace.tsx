@@ -3,7 +3,7 @@ import { Fragment } from 'react';
 
 import type { Card } from '../../api/types';
 import { canSpeak, speak } from '../../lib/speech';
-import { POS_HINTS, title } from '../../lib/word';
+import { irregularPattern, POS_HINTS, title } from '../../lib/word';
 import { ReportButton } from '../report/ReportButton';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
 }
 
 export function CardFace({ card, flipped, onFlip }: Props) {
+  const pattern = card.irregular && card.pos === 'verb' ? irregularPattern(card.forms) : null;
   return (
     <Tappable
       className="card"
@@ -49,7 +50,12 @@ export function CardFace({ card, flipped, onFlip }: Props) {
         )}
       </Caption>
 
-      {!flipped && <Caption className="card__hint">нажми, чтобы проверить</Caption>}
+      {/* Вспомнить формы до переворота — то же активное припоминание, что и перевод. */}
+      {!flipped && (
+        <Caption className="card__hint">
+          {pattern ? 'вспомни перевод и три формы, потом нажми' : 'нажми, чтобы проверить'}
+        </Caption>
+      )}
 
       {flipped && (
         <div className="card__back">
@@ -58,7 +64,30 @@ export function CardFace({ card, flipped, onFlip }: Props) {
             {card.pos}
             {card.irregular && ' · неправильное'}
           </Caption>
-          {card.forms && <Caption className="card__pos">{card.forms}</Caption>}
+          {pattern ? (
+            <>
+              <Text weight="2">
+                {card.forms}{' '}
+                {canSpeak && (
+                  <button
+                    type="button"
+                    className="link"
+                    aria-label="Произнести формы"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      // go, went, gone — ритм тройки запоминается на слух.
+                      speak(card.forms.replace(/[·/]/g, ','));
+                    }}
+                  >
+                    🔊
+                  </button>
+                )}
+              </Text>
+              <Caption className="card__pos">{pattern}</Caption>
+            </>
+          ) : (
+            card.forms && <Caption className="card__pos">{card.forms}</Caption>
+          )}
           {/* Fragment, а не div: перевод должен встать строкой ниже примера,
               а это делает flex-колонка .card__back только для прямых детей. */}
           {card.examples.map((example) => (

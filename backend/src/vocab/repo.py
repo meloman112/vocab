@@ -16,6 +16,11 @@ CARD_SELECT = """
     from cards c join words w on w.id = c.word_id
 """
 
+# Неправильные глаголы — набор без поля deck: у слова один набор, а 134
+# из них уже в «B1 3000 words». Поэтому набор задан условием, а не меткой.
+IRREGULAR_DECK = "Неправильные глаголы"
+IRREGULAR_VERB = "w.irregular and w.pos = 'verb' and w.forms like '% · % · %'"
+
 WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, level, banned"
 
 # 10 очков за каждое повторение, как в Duolingo — за урок.
@@ -203,15 +208,17 @@ async def discover(
     фактически задаёт частота. С deck — только из этого набора.
     """
     ids = await conn.fetch(
-        """
+        f"""
         insert into cards (user_id, word_id)
         select $1, w.id from words w
         where not w.banned
           and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)
-          and ($3::text is null or w.deck = $3)
+          and ($3::text is null or w.deck = $3 or ($3 = $4 and {IRREGULAR_VERB}))
+        -- Неправильные глаголы — по частоте: be, have, do раньше forsake.
         -- Служебные слова в конец: the, of, you знает любой начинающий, и
         -- первая же выдача из них отбила бы желание продолжать.
-        order by w.deck_order nulls last,
+        order by case when $3 = $4 then w.zipf end desc nulls last,
+                 w.deck_order nulls last,
                  w.pos in ('determiner', 'preposition', 'pronoun', 'conjunction',
                            'modal', 'interjection', 'numeral', 'article', 'particle'),
                  w.level nulls last,
@@ -224,6 +231,7 @@ async def discover(
         user_id,
         limit,
         deck,
+        IRREGULAR_DECK,
     )
     # array_position сохраняет порядок выборки выше: популярные слова первыми.
     return await conn.fetch(
@@ -334,19 +342,29 @@ async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Reco
     )
 
 
+LEARNED = "count(c.id) filter (where c.state = 2 or c.known_at is not null)"
+
+
 async def deck_progress(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
     """Сколько слов каждого набора выучено: Review или «знаю», как в stats."""
     return await conn.fetch(
-        """
-        select w.deck, count(*) as total,
-               count(c.id) filter (where c.state = 2 or c.known_at is not null) as learned
-        from words w
-        left join cards c on c.word_id = w.id and c.user_id = $1
-        where w.deck is not null and not w.banned
-        group by w.deck
-        order by min(w.deck_order)
+        f"""
+        select deck, total, learned from (
+          select w.deck, count(*) as total, {LEARNED} as learned, min(w.deck_order) as position
+          from words w
+          left join cards c on c.word_id = w.id and c.user_id = $1
+          where w.deck is not null and not w.banned
+          group by w.deck
+          union all
+          select $2::text, count(*), {LEARNED}, null
+          from words w
+          left join cards c on c.word_id = w.id and c.user_id = $1
+          where {IRREGULAR_VERB} and not w.banned
+        ) decks
+        order by position nulls last
         """,
         user_id,
+        IRREGULAR_DECK,
     )
 
 
@@ -476,7 +494,7 @@ async def weak_cards(
 # неправильные глаголы: формы учат таблицей, их можно спрашивать сразу.
 QUIZ_FILTERS = {
     "any": "c.last_review is not null",
-    "irregular": "w.irregular and w.pos = 'verb' and w.forms like '% · % · %'",
+    "irregular": IRREGULAR_VERB,
 }
 
 

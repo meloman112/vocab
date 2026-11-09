@@ -5,6 +5,7 @@ import { POS_NAMES } from '../../lib/word';
 import { SessionSummary } from '../review/SessionSummary';
 import { acceptedWords } from './check';
 import { Choice } from './exercises/Choice';
+import { FormChoice } from './exercises/FormChoice';
 import { Forms } from './exercises/Forms';
 import { Pairs } from './exercises/Pairs';
 import { Typing } from './exercises/Typing';
@@ -17,8 +18,11 @@ interface Props {
   onLeaderboard: () => void;
 }
 
+/** Состояние FSRS «выучено»: такой глагол спрашиваем вводом, а не выбором. */
+const REVIEW = 2;
+
 const EMPTY: Partial<Record<Mode['id'], string>> = {
-  irregular: 'В твоих словах пока нет неправильных глаголов. Пришли боту went или bought.',
+  irregular: 'В твоих словах пока нет неправильных глаголов. Возьми их набором «Неправильные глаголы» на главной.',
   cloze: 'Ни в одном примере твоих слов не нашлось формы слова. Попробуй другой тест.',
 };
 
@@ -102,7 +106,7 @@ function Exercise({ mode, round, onDone }: ExerciseProps) {
     case 'pairs':
       return <Pairs round={round} onDone={onDone} />;
     case 'irregular':
-      return <Forms card={card} onDone={onDone} />;
+      return card.state === REVIEW ? <Forms card={card} onDone={onDone} /> : <FormChoice card={card} onDone={onDone} />;
     case 'spell':
       return (
         <Typing

@@ -3,6 +3,7 @@ import { Fragment, useEffect, useReducer, useRef, useState, type KeyboardEvent, 
 
 import type { GrammarMistakeIn } from '../../api/types';
 import { celebrate } from '../../lib/celebrate';
+import { shuffle } from '../../lib/shuffle';
 import { impact, notify, useNoVerticalSwipes } from '../../lib/telegram';
 import { capitalizeAt, partsOf, ruleFor, slotsOf } from './book';
 import { bracketLabel, diagnose, norm, type Diagnosis, type Slot } from './engine';
@@ -18,15 +19,6 @@ function loadMode(): Mode {
   } catch {
     return 'type';
   }
-}
-
-function shuffle<T>(a: T[]): T[] {
-  const b = [...a];
-  for (let i = b.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [b[i], b[j]] = [b[j]!, b[i]!];
-  }
-  return b;
 }
 
 type Bad = Diagnosis & { j: number };

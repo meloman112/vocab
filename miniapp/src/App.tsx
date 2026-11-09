@@ -73,7 +73,14 @@ export function App() {
         );
       case 'cards':
         // key — набор: переход из одного набора в другой начинает сессию заново.
-        return <CardsFlow key={screen.deck} deck={screen.deck} onLeaderboard={openBoard} />;
+        return (
+          <CardsFlow
+            key={screen.deck}
+            deck={screen.deck}
+            onLeaderboard={openBoard}
+            onDrill={() => setScreen({ name: 'quiz', mode: 'irregular' })}
+          />
+        );
       case 'quiz':
         return <QuizFlow key={screen.mode} mode={modeById(screen.mode)} onCards={cards} onLeaderboard={openBoard} />;
       case 'admin':

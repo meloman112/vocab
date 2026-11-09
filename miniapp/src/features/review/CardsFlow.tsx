@@ -4,13 +4,22 @@ import { ReviewScreen } from './ReviewScreen';
 import { SessionSummary } from './SessionSummary';
 import { useReviewSession } from './useReviewSession';
 
+/** Совпадает с repo.IRREGULAR_DECK: после этого набора предлагаем тест форм. */
+const IRREGULAR_DECK = 'Неправильные глаголы';
+
+interface Props {
+  deck?: string;
+  onLeaderboard: () => void;
+  onDrill: () => void;
+}
+
 /** Повторение карточками: «Не помню», «Помню», «Знаю». */
-export function CardsFlow({ deck, onLeaderboard }: { deck?: string; onLeaderboard: () => void }) {
+export function CardsFlow({ deck, onLeaderboard, onDrill }: Props) {
   const session = useReviewSession(deck);
   const { known, undoKnown, dismissKnown } = session;
   return (
     <>
-      <Phase session={session} deck={deck} onLeaderboard={onLeaderboard} />
+      <Phase session={session} deck={deck} onLeaderboard={onLeaderboard} onDrill={deck === IRREGULAR_DECK ? onDrill : undefined} />
       {/* Случайное «Знаю» иначе не исправить: слово просто исчезло бы. */}
       {known && (
         <Snackbar
@@ -31,10 +40,12 @@ function Phase({
   session,
   deck,
   onLeaderboard,
+  onDrill,
 }: {
   session: ReturnType<typeof useReviewSession>;
   deck?: string;
   onLeaderboard: () => void;
+  onDrill?: () => void;
 }) {
   const { state, flip, rate, markKnown, reload, learnNew, settled } = session;
 
@@ -102,6 +113,7 @@ function Phase({
           settled={settled}
           onRestart={reload}
           onLeaderboard={onLeaderboard}
+          onDrill={onDrill}
         />
       );
   }
