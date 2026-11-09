@@ -12,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from ..client import VocabAPI
 from ..config import Settings
 from .handlers import review_keyboard
+from .teachers import test_keyboard
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,18 @@ async def notify(bot: Bot, api: VocabAPI, cfg: Settings, evening: bool) -> None:
             log.warning("не отправил напоминание %s: %s", target["tg_id"], exc)
 
 
+async def remind_tests(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
+    """Тест со сроком завтра ещё не сдан — одно напоминание."""
+    for target in await api.test_reminders():
+        try:
+            await bot.send_message(
+                target["tg_id"], f"⏰ Завтра последний день сдать тест «{target['title']}».",
+                reply_markup=test_keyboard(cfg, target["test_id"]),
+            )
+        except Exception as exc:  # noqa: BLE001 — как в notify: остальным напоминание дойти должно
+            log.warning("не напомнил о тесте %s: %s", target["tg_id"], exc)
+
+
 def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=cfg.tz)
     # Последнее напоминание дня — «вечернее»: в нём спасаем серию.
@@ -75,6 +88,8 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings) -> AsyncIOScheduler:
             # пропущенное напоминание — оно уже неактуально.
             misfire_grace_time=300,
         )
+    scheduler.add_job(remind_tests, CronTrigger(hour=evening_hour, minute=5), args=(bot, api, cfg),
+                      id="remind-tests", misfire_grace_time=300)
     scheduler.start()
     log.info("напоминания в %s (%s)", cfg.reminder_hour_list, cfg.tz)
     return scheduler

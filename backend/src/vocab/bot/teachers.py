@@ -15,11 +15,17 @@ log = logging.getLogger(__name__)
 router = Router()
 
 INVITE_PREFIX = "teach_"
+CLASS_PREFIX = "class_"
 
 
 def screen_button(cfg: Settings, text: str, screen: str) -> InlineKeyboardButton:
     """Кнопка, открывающая мини-апп сразу на нужном экране."""
     return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=f"{cfg.miniapp_url}?screen={screen}"))
+
+
+def test_keyboard(cfg: Settings, test_id: int) -> InlineKeyboardMarkup:
+    button = InlineKeyboardButton(text="Открыть тест", web_app=WebAppInfo(url=f"{cfg.miniapp_url}?screen=test&id={test_id}"))
+    return InlineKeyboardMarkup(inline_keyboard=[[button]])
 
 
 def grammar_keyboard(cfg: Settings) -> InlineKeyboardMarkup:
@@ -52,6 +58,30 @@ async def redeem(message: Message, command: CommandObject, api: VocabAPI, cfg: S
             await bot.send_message(inviter, f"{user.full_name} теперь учитель.")
         except Exception as exc:  # noqa: BLE001 — уведомление не должно ронять назначение
             log.warning("не сообщил %s о новом учителе: %s", inviter, exc)
+
+
+@router.message(CommandStart(deep_link=True, magic=F.args.startswith(CLASS_PREFIX)))
+async def join_class(message: Message, command: CommandObject, api: VocabAPI, cfg: Settings, bot: Bot) -> None:
+    """t.me/<bot>?start=class_<code> — ссылка класса, которую учитель раздал ученикам."""
+    code = (command.args or "").removeprefix(CLASS_PREFIX)
+    user = message.from_user
+    try:
+        result = await api.join_class(user.id, user.full_name, code)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 404:
+            raise
+        await message.answer("Такого класса нет. Попроси у учителя ссылку ещё раз.")
+        return
+    await message.answer(
+        f"Ты в классе «{result['class_name']}» 🎒 Учитель: {result['teacher']}.\n\n"
+        "Тесты от учителя придут сюда, в бот. Открытые тесты — в мини-аппе, раздел «Тесты».",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[screen_button(cfg, "📝 Мои тесты", "tests")]]),
+    )
+    if result["joined"] and result["teacher_tg_id"] != user.id:
+        try:
+            await bot.send_message(result["teacher_tg_id"], f"{user.full_name} теперь в классе «{result['class_name']}».")
+        except Exception as exc:  # noqa: BLE001 — уведомление не должно ронять вход в класс
+            log.warning("не сообщил учителю %s о новом ученике: %s", result["teacher_tg_id"], exc)
 
 
 @router.message(Command("grammar"))

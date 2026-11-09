@@ -39,6 +39,7 @@ interface TelegramWebApp {
   ready(): void;
   expand(): void;
   isVersionAtLeast(version: string): boolean;
+  openTelegramLink(url: string): void;
   disableVerticalSwipes?(): void;
   enableVerticalSwipes?(): void;
 }
@@ -75,8 +76,19 @@ export function initTelegram(): void {
   webApp?.expand();
 }
 
+const query = new URLSearchParams(window.location.search);
+
 /** Экран, на который открыли мини-апп: кнопки бота добавляют ?screen=grammar. */
-export const startScreen = new URLSearchParams(window.location.search).get('screen');
+export const startScreen = query.get('screen');
+
+/** Тест из сообщения бота: ?screen=test&id=7. */
+export const startTestId = Number(query.get('id')) || null;
+
+/** Окно «Переслать» Telegram: учитель отправляет ссылку класса в чат. */
+export function shareLink(url: string, text: string): void {
+  const share = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  webApp?.openTelegramLink(share);
+}
 
 /**
  * Пока на экране упражнение с плитками, вертикальный свайп не должен

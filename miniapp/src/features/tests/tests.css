@@ -1,0 +1,124 @@
+/* Тесты учителя: лист и ручки — из тетради (grammar.css), здесь только раскладка. */
+
+.t-run {
+  gap: 12px;
+  /* Под фиксированной кнопкой «Сдать» последний вопрос не прячется. */
+  padding-bottom: 120px;
+}
+
+.t-head {
+  display: grid;
+  gap: 4px;
+}
+
+.screen--list > .t-head {
+  padding: 16px 16px 0;
+}
+
+.t-confirm {
+  display: block;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.t-format {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.t-format code {
+  font-size: 13px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--g-pen-soft);
+  color: var(--g-pen);
+}
+
+.t-eq {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 14px;
+  justify-content: start;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.t-preview {
+  display: grid;
+  gap: 4px;
+}
+
+.t-preview .g-sent {
+  font-size: 16px;
+  line-height: 2;
+}
+
+.t-err {
+  color: var(--g-red);
+  font-size: 14px;
+}
+
+.t-note {
+  color: var(--g-amber);
+  font-size: 14px;
+}
+
+.t-meter {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--g-line);
+}
+
+.t-meter i {
+  display: block;
+  height: 100%;
+  background: var(--g-ok);
+}
+
+.t-meter i.warn {
+  background: var(--g-amber);
+}
+
+.t-meter i.bad {
+  background: var(--g-red);
+}
+
+.t-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.t-link {
+  font-size: 13px;
+  color: var(--g-muted);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.t-file {
+  padding: 10px;
+  border: 1.5px dashed var(--g-pen);
+  border-radius: 12px;
+  text-align: center;
+  font: 600 15px var(--tgui--font-family);
+  color: var(--g-pen);
+  cursor: pointer;
+}
+
+.t-good {
+  color: var(--g-ok);
+}
+
+.t-mid {
+  color: var(--g-amber);
+}
+
+.t-poor {
+  color: var(--g-red);
+}

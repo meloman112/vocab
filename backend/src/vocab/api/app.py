@@ -16,6 +16,7 @@ from ..db import create_pool, migrate
 from ..dictionary import backfill_zipf
 from .. import grammar
 from ..mcp.server import build_mcp_app
+from .classwork import router as classwork_router
 from .grammar import router as grammar_router
 from .routes import router
 
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(grammar_router)
+    app.include_router(classwork_router)
     app.mount("/mcp", mcp_app)
 
     if STATIC_DIR.is_dir():

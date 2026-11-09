@@ -56,6 +56,28 @@ TRANSLATE_PROMPT = """\
 Отвечай только JSON-объектом {"translation": "..."}.
 """
 
+TEST_PROMPT = """\
+Ты помогаешь учителю английского перенести его контрольную в онлайн-тест.
+Тебе пришлют текст контрольной. Найди задания, где ученик вписывает ответ:
+раскрыть скобки, вставить пропуск, поставить глагол в нужную форму. Задания
+с выбором варианта (a, b, c) тоже превращай в пропуск с верным ответом.
+
+Каждое задание — одна строка: предложение целиком, на месте пропуска —
+верный ответ в квадратных скобках. Если верных ответов несколько, перечисли
+их через «|»: [has lived|has been living]. Подсказку из задания (глагол
+в скобках) поставь сразу после пропуска в круглых скобках:
+«She (not like) coffee.» → «She [doesn't like] (not like) coffee.»
+Сокращения не дублируй: don't и do not и так считаются одним ответом.
+Заголовки, инструкции и нумерацию не переноси.
+
+Если ответ есть в тексте (ключ, ответы в конце) — бери его, guessed: false.
+Если ответа нет или ответ в ключе, по-твоему, неверен — поставь свой,
+guessed: true, а в note коротко по-русски объясни, что проверить.
+
+Отвечай только JSON-объектом
+{"questions": [{"line": "...", "guessed": false, "note": ""}]}.
+"""
+
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
 # Локальная Qwen на общем сервере: карточка генерируется ~50 с, а занятый
@@ -114,7 +136,7 @@ def parse_phrases(content: str) -> list[str]:
     return [" ".join(str(p).split()).lower() for p in phrases if str(p).strip()]
 
 
-async def _chat(cfg: Settings, system: str, user: str) -> str:
+async def _chat(cfg: Settings, system: str, user: str, timeout: httpx.Timeout = TIMEOUT) -> str:
     payload = {
         "model": cfg.deepseek_model,
         "messages": [
@@ -129,7 +151,7 @@ async def _chat(cfg: Settings, system: str, user: str) -> str:
         # это минуты ожидания ради карточки, которую она пишет и без них.
         "chat_template_kwargs": {"enable_thinking": False},
     }
-    async with httpx.AsyncClient(base_url=cfg.deepseek_base_url, timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(base_url=cfg.deepseek_base_url, timeout=timeout) as client:
         response = await client.post(
             "/chat/completions",
             json=payload,
@@ -187,3 +209,24 @@ def parse_translation(content: str) -> str:
 async def translate(cfg: Settings, text: str) -> str:
     """Перевод фразы или предложения целиком — для выделенного в мини-аппе."""
     return await _ask(cfg, TRANSLATE_PROMPT, text, parse_translation)
+
+
+def parse_test(content: str) -> list[dict[str, Any]]:
+    rows = json.loads(content)["questions"]
+    return [
+        {"line": " ".join(str(r["line"]).split()), "guessed": bool(r.get("guessed")),
+         "note": str(r.get("note") or "").strip()}
+        for r in rows if str(r.get("line") or "").strip()
+    ]
+
+
+async def convert_test(cfg: Settings, text: str) -> list[dict[str, Any]]:
+    """Контрольная учителя → строки теста. Одна попытка с долгим ожиданием:
+    ответ длинный, а учитель ждёт и при отказе нажмёт ещё раз."""
+    if not cfg.deepseek_api_key:
+        raise EnrichError("DEEPSEEK_API_KEY пуст")
+    try:
+        return parse_test(await _chat(cfg, TEST_PROMPT, text, httpx.Timeout(300.0)))
+    except Exception as exc:  # noqa: BLE001 — причина уходит в лог, итог — в EnrichError
+        log.warning("ИИ: контрольная не разобрана: %s", exc)
+        raise EnrichError("ИИ не разобрал контрольную") from exc

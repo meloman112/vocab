@@ -99,3 +99,9 @@ class VocabAPI:
 
     async def students(self, tg_id: int) -> list[dict[str, Any]]:
         return await self._call("GET", "/teacher/students", tg_id)
+
+    async def join_class(self, tg_id: int, tg_name: str, code: str) -> dict[str, Any]:
+        return await self._call("POST", f"/classes/{code}/join", tg_id, tg_name)
+
+    async def test_reminders(self) -> list[dict[str, Any]]:
+        return await self._call("GET", "/internal/test-reminders")

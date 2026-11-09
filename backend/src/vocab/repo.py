@@ -847,3 +847,187 @@ async def grammar_summary(conn: asyncpg.Connection, user_id: int) -> asyncpg.Rec
         " from grammar_results where user_id = $1",
         user_id,
     )
+
+
+# --- классы и тесты учителя ------------------------------------------------------
+
+# Срок прошёл: последний день сдачи — due включительно. $tz — часовой пояс.
+TEST_CLOSED = "(now() at time zone {tz})::date > t.due"
+
+
+async def create_class(
+    conn: asyncpg.Connection, teacher_id: int, name: str, code: str
+) -> asyncpg.Record:
+    return await conn.fetchrow(
+        "insert into classes (teacher_id, name, code) values ($1, $2, $3)"
+        " returning id, name, code, 0::bigint as members",
+        teacher_id, name, code,
+    )
+
+
+async def teacher_classes(conn: asyncpg.Connection, teacher_id: int) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        "select c.id, c.name, c.code,"
+        " (select count(*) from class_members m where m.class_id = c.id) as members"
+        " from classes c where c.teacher_id = $1 order by c.created_at",
+        teacher_id,
+    )
+
+
+async def join_class(conn: asyncpg.Connection, code: str, user_id: int) -> asyncpg.Record | None:
+    """Ученик открыл ссылку класса. None — ссылки нет. Повторный заход
+    ничего не меняет, joined = false."""
+    async with conn.transaction():
+        cls = await conn.fetchrow(
+            "select c.id, c.name, coalesce(u.name, 'учитель') as teacher, u.tg_id as teacher_tg_id"
+            " from classes c join users u on u.id = c.teacher_id where c.code = $1",
+            code,
+        )
+        if cls is None:
+            return None
+        status = await conn.execute(
+            "insert into class_members (class_id, user_id) values ($1, $2) on conflict do nothing",
+            cls["id"], user_id,
+        )
+    return {**dict(cls), "joined": status == "INSERT 0 1"}
+
+
+async def owns_class(conn: asyncpg.Connection, class_id: int, teacher_id: int) -> bool:
+    return bool(await conn.fetchval(
+        "select exists (select 1 from classes where id = $1 and teacher_id = $2)",
+        class_id, teacher_id,
+    ))
+
+
+async def create_test(
+    conn: asyncpg.Connection, class_id: int, title: str, questions: list, due: Any
+) -> int:
+    return await conn.fetchval(
+        "insert into tests (class_id, title, questions, due) values ($1, $2, $3, $4) returning id",
+        class_id, title, questions, due,
+    )
+
+
+async def class_member_tg_ids(conn: asyncpg.Connection, class_id: int) -> list[int]:
+    rows = await conn.fetch(
+        "select u.tg_id from class_members m join users u on u.id = m.user_id where m.class_id = $1",
+        class_id,
+    )
+    return [r["tg_id"] for r in rows]
+
+
+async def teacher_tests(conn: asyncpg.Connection, teacher_id: int, tz: str) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        f"""
+        select t.id, t.title, t.due, c.name as class_name, {TEST_CLOSED.format(tz='$2')} as closed,
+               (select count(*) from class_members m where m.class_id = c.id) as members,
+               (select count(*) from test_submissions s where s.test_id = t.id) as submitted
+        from tests t join classes c on c.id = t.class_id
+        where c.teacher_id = $1
+        order by t.created_at desc
+        """,
+        teacher_id, tz,
+    )
+
+
+async def teacher_test(
+    conn: asyncpg.Connection, test_id: int, teacher_id: int, tz: str
+) -> asyncpg.Record | None:
+    return await conn.fetchrow(
+        f"select t.id, t.title, t.due, t.questions, c.name as class_name,"
+        f" {TEST_CLOSED.format(tz='$3')} as closed"
+        " from tests t join classes c on c.id = t.class_id where t.id = $1 and c.teacher_id = $2",
+        test_id, teacher_id, tz,
+    )
+
+
+async def test_results(conn: asyncpg.Connection, test_id: int) -> list[asyncpg.Record]:
+    """Весь класс: сдавшие с ответами и не сдавшие (answers = null)."""
+    return await conn.fetch(
+        """
+        select u.id as user_id, coalesce(u.name, 'Без имени') as name, s.answers, s.submitted_at
+        from tests t
+        join class_members m on m.class_id = t.class_id
+        join users u on u.id = m.user_id
+        left join test_submissions s on s.test_id = t.id and s.user_id = m.user_id
+        where t.id = $1
+        order by s.submitted_at is null, u.name
+        """,
+        test_id,
+    )
+
+
+async def test_accepted(conn: asyncpg.Connection, test_id: int) -> dict[int, set[str]]:
+    rows = await conn.fetch("select gap, answer from test_accepted where test_id = $1", test_id)
+    accepted: dict[int, set[str]] = {}
+    for r in rows:
+        accepted.setdefault(r["gap"], set()).add(r["answer"])
+    return accepted
+
+
+async def accept_test_answer(conn: asyncpg.Connection, test_id: int, gap: int, answer: str) -> None:
+    await conn.execute(
+        "insert into test_accepted (test_id, gap, answer) values ($1, $2, $3) on conflict do nothing",
+        test_id, gap, answer,
+    )
+
+
+async def delete_test(conn: asyncpg.Connection, test_id: int, teacher_id: int) -> bool:
+    status = await conn.execute(
+        "delete from tests t using classes c"
+        " where t.id = $1 and c.id = t.class_id and c.teacher_id = $2",
+        test_id, teacher_id,
+    )
+    return status != "DELETE 0"
+
+
+STUDENT_TEST = """
+    select t.id, t.title, t.due, t.questions, coalesce(u.name, 'учитель') as teacher,
+           {closed} as closed, s.answers, s.submitted_at
+    from tests t
+    join class_members m on m.class_id = t.class_id and m.user_id = $1
+    join classes c on c.id = t.class_id
+    join users u on u.id = c.teacher_id
+    left join test_submissions s on s.test_id = t.id and s.user_id = $1
+"""
+
+
+async def student_tests(conn: asyncpg.Connection, user_id: int, tz: str) -> list[asyncpg.Record]:
+    return await conn.fetch(
+        STUDENT_TEST.format(closed=TEST_CLOSED.format(tz="$2")) + " order by t.due desc, t.id desc",
+        user_id, tz,
+    )
+
+
+async def student_test(
+    conn: asyncpg.Connection, test_id: int, user_id: int, tz: str
+) -> asyncpg.Record | None:
+    return await conn.fetchrow(
+        STUDENT_TEST.format(closed=TEST_CLOSED.format(tz="$2")) + " where t.id = $3",
+        user_id, tz, test_id,
+    )
+
+
+async def submit_test(conn: asyncpg.Connection, test_id: int, user_id: int, answers: list[str]) -> bool:
+    """False — уже сдано: попытка одна."""
+    status = await conn.execute(
+        "insert into test_submissions (test_id, user_id, answers) values ($1, $2, $3)"
+        " on conflict do nothing",
+        test_id, user_id, answers,
+    )
+    return status == "INSERT 0 1"
+
+
+async def test_reminders(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
+    """Кто не сдал тест, срок которого — завтра."""
+    return await conn.fetch(
+        """
+        select u.tg_id, t.id as test_id, t.title, t.due
+        from tests t
+        join class_members m on m.class_id = t.class_id
+        join users u on u.id = m.user_id
+        where t.due = (now() at time zone $1)::date + 1
+          and not exists (select 1 from test_submissions s where s.test_id = t.id and s.user_id = m.user_id)
+        """,
+        tz,
+    )

@@ -276,3 +276,89 @@ export interface AdminSummary {
   banned: number;
   open_reports: number;
 }
+
+/* --- тесты учителя --- */
+
+/** Ответы ученику до срока не приходят. */
+export interface Gap {
+  answers?: string[] | null;
+  hint: string;
+}
+
+export interface Question {
+  parts: (string | Gap)[];
+}
+
+export interface SchoolClass {
+  id: number;
+  name: string;
+  members: number;
+  /** t.me/<bot>?start=class_… — раздать ученикам. */
+  link: string;
+}
+
+export interface TestPreview {
+  questions: Question[];
+  errors: { line: number; error: string }[];
+}
+
+export interface ConvertedLine {
+  line: string;
+  /** Ответа не было в файле или ИИ с ним не согласен — note объясняет. */
+  guessed: boolean;
+  note: string;
+  /** Строка не разобралась как вопрос. */
+  error: string;
+}
+
+export interface TestRow {
+  id: number;
+  title: string;
+  due: string;
+  class_name: string;
+  closed: boolean;
+  members: number;
+  submitted: number;
+}
+
+export interface GapStat {
+  gap: number;
+  question: number;
+  correct: number;
+  wrong: { answer: string; count: number }[];
+}
+
+export interface StudentScore {
+  user_id: number;
+  name: string;
+  submitted_at: string | null;
+  score: number | null;
+  answers: string[] | null;
+  marks: boolean[] | null;
+}
+
+export interface TestReport {
+  id: number;
+  title: string;
+  due: string;
+  class_name: string;
+  closed: boolean;
+  questions: Question[];
+  gaps: GapStat[];
+  students: StudentScore[];
+}
+
+export interface StudentTest {
+  id: number;
+  title: string;
+  due: string;
+  teacher: string;
+  closed: boolean;
+  submitted_at: string | null;
+  total: number;
+  /** Балл, ответы с отметками — только после срока. */
+  score: number | null;
+  questions: Question[];
+  answers: string[] | null;
+  marks: boolean[] | null;
+}

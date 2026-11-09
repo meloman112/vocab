@@ -31,6 +31,8 @@ export default defineConfig({
       '/teacher': 'http://localhost:8000',
       '/teacher-invites': 'http://localhost:8000',
       '/cards': 'http://localhost:8000',
+      '/tests': 'http://localhost:8000',
+      '/classes': 'http://localhost:8000',
     },
   },
 });

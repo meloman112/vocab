@@ -411,3 +411,148 @@ class Invite(BaseModel):
 class Redeemed(BaseModel):
     # Кто выдал ссылку — бот скажет ему, что учитель появился.
     inviter_tg_id: int | None
+
+
+# --- тесты учителя ---------------------------------------------------------------
+
+
+class ClassIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class ClassOut(BaseModel):
+    id: int
+    name: str
+    members: int
+    # t.me/<bot>?start=class_<code> — по ней ученики заходят в класс.
+    link: str
+
+
+class Joined(BaseModel):
+    class_name: str
+    teacher: str
+    teacher_tg_id: int
+    # False — ученик уже был в классе.
+    joined: bool
+
+
+class Gap(BaseModel):
+    # Ученику до срока ответы не отдаются: None.
+    answers: list[str] | None = None
+    hint: str
+
+
+class Question(BaseModel):
+    parts: list[str | Gap]
+
+
+class LineError(BaseModel):
+    line: int
+    error: str
+
+
+class TestText(BaseModel):
+    text: str = Field(max_length=30000)
+
+
+class TestPreview(BaseModel):
+    questions: list[Question]
+    errors: list[LineError]
+
+
+class TestIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    class_id: int
+    due: date
+    text: str = Field(max_length=30000)
+
+
+class TestCreated(BaseModel):
+    id: int
+    sent: int
+
+
+class ConvertIn(BaseModel):
+    text: str = Field(default="", max_length=20000)
+    # .docx целиком в base64: файл маленький, а multipart ради него — лишняя зависимость.
+    docx: str = Field(default="", max_length=4_000_000)
+
+
+class ConvertedLine(BaseModel):
+    line: str
+    guessed: bool
+    note: str
+    error: str
+
+
+class TestRow(BaseModel):
+    id: int
+    title: str
+    due: date
+    class_name: str
+    closed: bool
+    members: int
+    submitted: int
+
+
+class WrongAnswer(BaseModel):
+    answer: str
+    count: int
+
+
+class GapStat(BaseModel):
+    gap: int
+    question: int
+    correct: int
+    wrong: list[WrongAnswer]
+
+
+class StudentScore(BaseModel):
+    user_id: int
+    name: str
+    submitted_at: datetime | None
+    score: int | None
+    answers: list[str] | None
+    marks: list[bool] | None
+
+
+class TestReport(BaseModel):
+    id: int
+    title: str
+    due: date
+    class_name: str
+    closed: bool
+    questions: list[Question]
+    gaps: list[GapStat]
+    students: list[StudentScore]
+
+
+class AcceptIn(BaseModel):
+    gap: int = Field(ge=0)
+    answer: str = Field(min_length=1, max_length=300)
+
+
+class StudentTest(BaseModel):
+    id: int
+    title: str
+    due: date
+    teacher: str
+    closed: bool
+    submitted_at: datetime | None
+    total: int
+    # Только после срока: балл, ответы и верность по пропускам.
+    score: int | None
+    questions: list[Question]
+    answers: list[str] | None
+    marks: list[bool] | None
+
+
+class SubmitIn(BaseModel):
+    answers: list[Annotated[str, Field(max_length=300)]] = Field(max_length=500)
+
+
+class TestReminder(BaseModel):
+    tg_id: int
+    test_id: int
+    title: str
+    due: date

@@ -5,16 +5,22 @@ import { api } from '../../api/client';
 import type { CommonMistake, Student } from '../../api/types';
 import { useBackButton } from '../../lib/telegram';
 import { loadBook, type Book } from '../grammar/book';
+import { TeacherTests } from '../tests/TeacherTests';
+import { TestEditor } from '../tests/TestEditor';
+import { TestReport } from '../tests/TestReport';
 import { ago, plural } from './format';
 import { Sentence } from './Sentence';
 import { StudentView } from './StudentView';
 import '../grammar/grammar.css';
 
-type Tab = 'students' | 'common';
+type Tab = 'students' | 'common' | 'tests';
+/** Открытый тест или редактор нового — поверх вкладки «Тесты». */
+type TestView = 'new' | number | null;
 
-/** Учитель: кто как сделал тетрадь и где ошибается класс. */
+/** Учитель: кто как сделал тетрадь, где ошибается класс, и тесты. */
 export function TeacherScreen({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<Tab>('students');
+  const [testView, setTestView] = useState<TestView>(null);
   const [book, setBook] = useState<Book | null>(null);
   const [students, setStudents] = useState<Student[] | null>(null);
   const [common, setCommon] = useState<CommonMistake[] | null>(null);
@@ -24,7 +30,8 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
   const [version, setVersion] = useState(0);
 
   const close = useCallback(() => setOpen(null), []);
-  useBackButton(open ? close : onExit);
+  const closeTest = useCallback(() => setTestView(null), []);
+  useBackButton(testView !== null ? closeTest : open ? close : onExit);
 
   useEffect(() => {
     Promise.all([loadBook(), api.teacher.students(), api.teacher.common()]).then(
@@ -40,7 +47,7 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
   // Без фигурных скобок Promise от scrollTo стал бы «очисткой» эффекта.
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [open, tab]);
+  }, [open, tab, testView]);
 
   if (error) return <Placeholder className="screen" header="Не открылось" description={error} />;
   if (!book || !students || !common) {
@@ -51,6 +58,8 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
     );
   }
 
+  if (testView === 'new') return <TestEditor onSent={closeTest} />;
+  if (testView !== null) return <TestReport id={testView} onDeleted={closeTest} />;
   if (open) return <StudentView book={book} student={open} onChanged={() => setVersion((v) => v + 1)} />;
 
   const unresolved = students.reduce((n, s) => n + s.mistakes, 0);
@@ -65,11 +74,16 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
           Ученики
         </SegmentedControl.Item>
         <SegmentedControl.Item selected={tab === 'common'} onClick={() => setTab('common')}>
-          Частые ошибки
+          Ошибки
+        </SegmentedControl.Item>
+        <SegmentedControl.Item selected={tab === 'tests'} onClick={() => setTab('tests')}>
+          Тесты
         </SegmentedControl.Item>
       </SegmentedControl>
 
-      {tab === 'students' ? (
+      {tab === 'tests' ? (
+        <TeacherTests onNew={() => setTestView('new')} onOpen={setTestView} />
+      ) : tab === 'students' ? (
         students.length ? (
           <List>
             <Section footer="Сверху — кто занимался последним. Красное число — ошибки, которые ты ещё не разобрал.">

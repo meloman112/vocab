@@ -2,12 +2,13 @@ import { Badge, Cell, List, Section, Text } from '@telegram-apps/telegram-ui';
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api/client';
-import type { Me, Stats } from '../../api/types';
+import type { Me, Stats, StudentTest } from '../../api/types';
 import { MODES, type ModeId } from '../quiz/modes';
 
 interface Props {
   onGrammar: () => void;
   onTeacher: () => void;
+  onTests: () => void;
   onCards: () => void;
   onDeck: (deck: string) => void;
   onQuiz: (mode: ModeId) => void;
@@ -22,9 +23,10 @@ interface Header {
   reports: number | null;
 }
 
-export function HomeScreen({ onGrammar, onTeacher, onCards, onDeck, onQuiz, onLeaderboard, onAdmin }: Props) {
+export function HomeScreen({ onGrammar, onTeacher, onTests, onCards, onDeck, onQuiz, onLeaderboard, onAdmin }: Props) {
   const [header, setHeader] = useState<Header | null>(null);
   const [error, setError] = useState('');
+  const [tests, setTests] = useState<StudentTest[]>([]);
 
   useEffect(() => {
     Promise.all([api.stats(), api.me()])
@@ -34,7 +36,10 @@ export function HomeScreen({ onGrammar, onTeacher, onCards, onDeck, onQuiz, onLe
         reports: me.is_admin ? (await api.admin.summary()).open_reports : null,
       }))
       .then(setHeader, (e: Error) => setError(e.message));
+    api.tests.list().then(setTests, (e: Error) => setError(e.message));
   }, []);
+
+  const todo = tests.filter((t) => !t.submitted_at && !t.closed).length;
 
   const due = header?.stats.due_now ?? 0;
   const me = header?.me;
@@ -51,6 +56,13 @@ export function HomeScreen({ onGrammar, onTeacher, onCards, onDeck, onQuiz, onLe
           >
             Тетрадь
           </Cell>
+          {tests.length > 0 && (
+            <Cell before={<Icon>📝</Icon>} onClick={onTests}
+              subtitle={todo ? `Нужно сдать: ${todo}` : 'Все тесты сданы'}
+              after={todo ? <Badge type="number" mode="critical">{todo}</Badge> : undefined}>
+              Тесты от учителя
+            </Cell>
+          )}
         </Section>
 
         <Section
@@ -97,7 +109,7 @@ export function HomeScreen({ onGrammar, onTeacher, onCards, onDeck, onQuiz, onLe
             Рейтинг недели
           </Cell>
           {me?.is_teacher && (
-            <Cell before={<Icon>👩‍🏫</Icon>} subtitle="Ошибки учеников в тетради" onClick={onTeacher}>
+            <Cell before={<Icon>👩‍🏫</Icon>} subtitle="Ошибки в тетради, классы и тесты" onClick={onTeacher}>
               Ученики
             </Cell>
           )}

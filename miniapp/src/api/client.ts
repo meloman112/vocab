@@ -21,6 +21,12 @@ import type {
   ReviewResult,
   Stats,
   WordEdit,
+  ConvertedLine,
+  SchoolClass,
+  StudentTest,
+  TestPreview,
+  TestReport,
+  TestRow,
 } from './types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -38,8 +44,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // пользователю от него пользы нет. Статус в сообщении — чтобы 401
     // (открыли вне Telegram) отличался от 500. Исключение — 502 от
     // Telegram при отправке PDF: там detail объясняет, что нажать Start,
-    // и 422 от перевода — «не знаю такого слова».
-    const detail = response.status === 502 || response.status === 422 ?((await response.json().catch(() => null)) as { detail?: unknown } | null)?.detail : null;
+    // и 422 от перевода — «не знаю такого слова». Тесты учителя объясняют
+    // 404/409/410 по-русски: «срок прошёл», «тест уже сдан».
+    const detail = [404, 409, 410, 422, 502].includes(response.status) ?((await response.json().catch(() => null)) as { detail?: unknown } | null)?.detail : null;
     throw new Error(typeof detail === 'string' ? detail : `Запрос ${path} вернул ${response.status}`);
   }
   // 204 — тела нет, и json() упал бы на пустой строке.
@@ -95,6 +102,24 @@ export const api = {
     student: (userId: number) => request<StudentDetail>(`/teacher/students/${userId}`),
     accept: (mistakeId: number) => send<void>('POST', `/teacher/mistakes/${mistakeId}/accept`),
     common: () => request<CommonMistake[]>('/teacher/mistakes/common'),
+    classes: () => request<SchoolClass[]>('/teacher/classes'),
+    createClass: (name: string) => send<SchoolClass>('POST', '/teacher/classes', { name }),
+    tests: () => request<TestRow[]>('/teacher/tests'),
+    test: (id: number) => request<TestReport>(`/teacher/tests/${id}`),
+    preview: (text: string, signal?: AbortSignal) =>
+      request<TestPreview>('/teacher/tests/preview', { method: 'POST', body: JSON.stringify({ text }), signal }),
+    convert: (source: { text?: string; docx?: string }) => send<ConvertedLine[]>('POST', '/teacher/tests/convert', source),
+    createTest: (test: { title: string; class_id: number; due: string; text: string }) =>
+      send<{ id: number; sent: number }>('POST', '/teacher/tests', test),
+    acceptAnswer: (testId: number, gap: number, answer: string) =>
+      send<void>('POST', `/teacher/tests/${testId}/accept`, { gap, answer }),
+    deleteTest: (id: number) => send<void>('DELETE', `/teacher/tests/${id}`),
+  },
+
+  tests: {
+    list: () => request<StudentTest[]>('/tests'),
+    get: (id: number) => request<StudentTest>(`/tests/${id}`),
+    submit: (id: number, answers: string[]) => send<void>('POST', `/tests/${id}/submit`, { answers }),
   },
 
   admin: {
