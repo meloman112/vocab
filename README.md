@@ -80,9 +80,14 @@ API_TOKEN=... SMOKE_BASE=https://DOMAIN make smoke
 ### Боевой сервер
 
 Сейчас vocab живёт на `test_moe` в `~/vocab` — это git-клон, `.env` лежит
-только там. Публичный адрес даёт туннель Aral Cloud (контейнер
-`vocab_tunnel`, `aral tunnel http 8000`): `https://vocab-7e5999.tun.aralcloud.uz`,
-поэтому `BIND_ADDR=127.0.0.1`, а NetBird не нужен. Бот — @workbookonlinebot
+только там. Публичный адрес — `https://elearn.tpp.uz/vocab/app/`: nginx
+elearn.tpp.uz держит TLS и проксирует на `:80` сервера, там Traefik гейтвея
+sarmoni (репо SarMoni, `infra/gateway`) срезает `/vocab` и отдаёт в `api`.
+Наружу открыты только статика `/vocab/app/` и запросы с заголовком
+`X-Init-Data`; `X-Token`, `/mcp` и `/internal` снаружи недоступны.
+Поэтому в `.env` сервера `DOMAIN=elearn.tpp.uz/vocab`,
+`BIND_ADDR=127.0.0.1` и `COMPOSE_FILE=docker-compose.yml:docker-compose.edge.yml`
+(второй файл подключает `api` к сети гейтвея), NetBird не нужен. Бот — @workbookonlinebot
 (до объединения с тетрадью был @vocab_srs_bot; данные привязаны к Telegram
 ID, поэтому смена `BOT_TOKEN` ничего не теряет).
 

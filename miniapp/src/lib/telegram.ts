@@ -54,6 +54,16 @@ const webApp = window.Telegram?.WebApp;
 /** Пусто, когда страница открыта в обычном браузере, — API ответит 401. */
 export const initData = webApp?.initData ?? '';
 
+/**
+ * API лежит каталогом выше мини-аппа: /app/ → /, /vocab/app/ → /vocab/.
+ * Абсолютный путь от корня за общим шлюзом ушёл бы чужому сервису.
+ */
+const apiRoot = new URL('..', window.location.href);
+
+export function apiUrl(path: string): string {
+  return new URL(path.slice(1), apiRoot).toString();
+}
+
 export const appearance: 'light' | 'dark' = webApp?.colorScheme ?? 'light';
 
 /** telegram-ui различает всего два оформления; всё, кроме Apple, — base. */

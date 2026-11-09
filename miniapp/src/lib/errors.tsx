@@ -1,7 +1,7 @@
 import { Button, Placeholder } from '@telegram-apps/telegram-ui';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
-import { initData } from './telegram';
+import { apiUrl, initData } from './telegram';
 
 /**
  * Ошибка клиента — в лог сервера. Иначе падение в чьём-то Telegram видно
@@ -9,7 +9,7 @@ import { initData } from './telegram';
  */
 export function reportError(error: unknown, where: string): void {
   const e = error instanceof Error ? error : new Error(String(error));
-  fetch('/client-errors', {
+  fetch(apiUrl('/client-errors'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Init-Data': initData },
     body: JSON.stringify({

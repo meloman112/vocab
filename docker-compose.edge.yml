@@ -1,0 +1,15 @@
+# Сервер: api вдобавок в сети гейтвея sarmoni — он публикует мини-апп на
+# общем домене под /vocab. Отдельным файлом, потому что локально этой сети
+# нет; на сервере подключается через COMPOSE_FILE в .env.
+services:
+  api:
+    networks:
+      default:
+      edge:
+        # Имя «api» в сети гейтвея занято сервисами sarmoni.
+        aliases: [vocab]
+
+networks:
+  edge:
+    name: sarmoni-edge
+    external: true

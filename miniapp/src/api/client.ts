@@ -1,4 +1,4 @@
-import { initData } from '../lib/telegram';
+import { apiUrl, initData } from '../lib/telegram';
 import type {
   AdminSummary,
   AdminWord,
@@ -23,12 +23,8 @@ import type {
   WordEdit,
 } from './types';
 
-/**
- * API и статика отдаются одним приложением, поэтому базового URL нет:
- * относительный путь всегда попадает туда, откуда пришла страница.
- */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
