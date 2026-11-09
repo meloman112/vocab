@@ -9,6 +9,7 @@ interface Props {
   onGrammar: () => void;
   onTeacher: () => void;
   onCards: () => void;
+  onDeck: (deck: string) => void;
   onQuiz: (mode: ModeId) => void;
   onLeaderboard: () => void;
   onAdmin: () => void;
@@ -21,7 +22,7 @@ interface Header {
   reports: number | null;
 }
 
-export function HomeScreen({ onGrammar, onTeacher, onCards, onQuiz, onLeaderboard, onAdmin }: Props) {
+export function HomeScreen({ onGrammar, onTeacher, onCards, onDeck, onQuiz, onLeaderboard, onAdmin }: Props) {
   const [header, setHeader] = useState<Header | null>(null);
   const [error, setError] = useState('');
 
@@ -64,13 +65,14 @@ export function HomeScreen({ onGrammar, onTeacher, onCards, onQuiz, onLeaderboar
           >
             Карточки
           </Cell>
-          {/* Наборы — не выбор, а прогресс: новые слова и так идут из них первыми. */}
+          {/* Тап — следующие 10 слов набора в свои карточки, сразу на изучение. */}
           {header?.stats.decks.map((deck) => (
             <Cell
               key={deck.deck}
               before={<Icon>📘</Icon>}
-              subtitle={`Изучено ${deck.learned} из ${deck.total}`}
+              subtitle={`Изучено ${deck.learned} из ${deck.total} · учить следующие 10`}
               multiline
+              onClick={() => onDeck(deck.deck)}
             >
               {deck.deck}
             </Cell>

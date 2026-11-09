@@ -115,11 +115,11 @@ async def get_queue(
 
 @router.post("/discover", response_model=schemas.QueueOut)
 async def discover(
-    request: Request, user_id: int = Depends(current_user)
+    request: Request, deck: str | None = None, user_id: int = Depends(current_user)
 ) -> schemas.QueueOut:
-    """Свои слова кончились — новые из общего словаря, сразу карточками."""
+    """Новые слова из общего словаря (или из набора deck), сразу карточками."""
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.discover(conn, user_id, DISCOVER_LIMIT)
+        rows = await repo.discover(conn, user_id, DISCOVER_LIMIT, deck)
     return _cards_out(rows)
 
 

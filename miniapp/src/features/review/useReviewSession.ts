@@ -5,7 +5,8 @@ import type { Card, Rating } from '../../api/types';
 import { impact, notify } from '../../lib/telegram';
 import { initialState, reducer } from './session';
 
-export function useReviewSession() {
+/** С deck сессия сразу берёт новые слова этого набора, а не очередь повторения. */
+export function useReviewSession(deck?: string) {
   const [state, dispatch] = useReducer(reducer, initialState);
   // Последняя карточка, отмеченная «Знаю», пока висит предложение отменить.
   const [known, setKnown] = useState<Card | null>(null);
@@ -14,7 +15,7 @@ export function useReviewSession() {
   const pending = useRef<Promise<unknown>[]>([]);
 
   const fetchCards = useCallback(
-    async (source: typeof api.queue, whenEmpty: 'empty' | 'exhausted') => {
+    async (source: () => ReturnType<typeof api.queue>, whenEmpty: 'empty' | 'exhausted') => {
       dispatch({ type: 'loading' });
       try {
         const { cards } = await source();
@@ -26,8 +27,11 @@ export function useReviewSession() {
     [],
   );
 
-  const load = useCallback(() => fetchCards(api.queue, 'empty'), [fetchCards]);
-  const learnNew = useCallback(() => fetchCards(api.discover, 'exhausted'), [fetchCards]);
+  const learnNew = useCallback(() => fetchCards(() => api.discover(deck), 'exhausted'), [fetchCards, deck]);
+  const load = useCallback(
+    () => (deck ? learnNew() : fetchCards(api.queue, 'empty')),
+    [deck, learnNew, fetchCards],
+  );
 
   useEffect(() => {
     void load();

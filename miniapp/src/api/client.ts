@@ -55,7 +55,8 @@ export const api = {
   queue: () => request<{ cards: Card[] }>('/queue'),
 
   /** Новые слова из общего словаря — сервер сразу заводит на них карточки. */
-  discover: () => request<{ cards: Card[] }>('/discover', { method: 'POST' }),
+  discover: (deck?: string) =>
+    request<{ cards: Card[] }>(deck ? `/discover?deck=${encodeURIComponent(deck)}` : '/discover', { method: 'POST' }),
 
   stats: () => request<Stats>('/stats'),
 

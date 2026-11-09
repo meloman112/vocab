@@ -15,7 +15,7 @@ import { appearance, platform, startScreen, useBackButton } from './lib/telegram
 
 type Screen =
   | { name: 'home' }
-  | { name: 'cards' }
+  | { name: 'cards'; deck?: string }
   | { name: 'quiz'; mode: ModeId }
   | { name: 'admin' }
   | { name: 'grammar' }
@@ -65,13 +65,15 @@ export function App() {
             onGrammar={() => setScreen({ name: 'grammar' })}
             onTeacher={() => setScreen({ name: 'teacher' })}
             onCards={cards}
+            onDeck={(deck) => setScreen({ name: 'cards', deck })}
             onQuiz={(mode) => setScreen({ name: 'quiz', mode })}
             onLeaderboard={openBoard}
             onAdmin={() => setScreen({ name: 'admin' })}
           />
         );
       case 'cards':
-        return <CardsFlow onLeaderboard={openBoard} />;
+        // key — набор: переход из одного набора в другой начинает сессию заново.
+        return <CardsFlow key={screen.deck} deck={screen.deck} onLeaderboard={openBoard} />;
       case 'quiz':
         return <QuizFlow key={screen.mode} mode={modeById(screen.mode)} onCards={cards} onLeaderboard={openBoard} />;
       case 'admin':

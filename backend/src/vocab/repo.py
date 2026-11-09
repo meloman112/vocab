@@ -191,7 +191,7 @@ async def word_exists(conn: asyncpg.Connection, word_id: int) -> bool:
 
 
 async def discover(
-    conn: asyncpg.Connection, user_id: int, limit: int
+    conn: asyncpg.Connection, user_id: int, limit: int, deck: str | None = None
 ) -> list[asyncpg.Record]:
     """Берёт из общего словаря слова, которых у пользователя нет, и сразу
     заводит на них карточки: сначала наборы учителя в порядке файла
@@ -200,7 +200,7 @@ async def discover(
     людей, потом самые частые в языке.
 
     Пока пользователей мало, популярность у всех одинаковая и порядок
-    фактически задаёт частота.
+    фактически задаёт частота. С deck — только из этого набора.
     """
     ids = await conn.fetch(
         """
@@ -208,6 +208,7 @@ async def discover(
         select $1, w.id from words w
         where not w.banned
           and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)
+          and ($3::text is null or w.deck = $3)
         -- Служебные слова в конец: the, of, you знает любой начинающий, и
         -- первая же выдача из них отбила бы желание продолжать.
         order by w.deck_order nulls last,
@@ -222,6 +223,7 @@ async def discover(
         """,
         user_id,
         limit,
+        deck,
     )
     # array_position сохраняет порядок выборки выше: популярные слова первыми.
     return await conn.fetch(

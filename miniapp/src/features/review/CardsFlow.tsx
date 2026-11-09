@@ -5,12 +5,12 @@ import { SessionSummary } from './SessionSummary';
 import { useReviewSession } from './useReviewSession';
 
 /** Повторение карточками: «Не помню», «Помню», «Знаю». */
-export function CardsFlow({ onLeaderboard }: { onLeaderboard: () => void }) {
-  const session = useReviewSession();
+export function CardsFlow({ deck, onLeaderboard }: { deck?: string; onLeaderboard: () => void }) {
+  const session = useReviewSession(deck);
   const { known, undoKnown, dismissKnown } = session;
   return (
     <>
-      <Phase session={session} onLeaderboard={onLeaderboard} />
+      <Phase session={session} deck={deck} onLeaderboard={onLeaderboard} />
       {/* Случайное «Знаю» иначе не исправить: слово просто исчезло бы. */}
       {known && (
         <Snackbar
@@ -29,9 +29,11 @@ export function CardsFlow({ onLeaderboard }: { onLeaderboard: () => void }) {
 
 function Phase({
   session,
+  deck,
   onLeaderboard,
 }: {
   session: ReturnType<typeof useReviewSession>;
+  deck?: string;
   onLeaderboard: () => void;
 }) {
   const { state, flip, rate, markKnown, reload, learnNew, settled } = session;
@@ -68,7 +70,7 @@ function Phase({
       return (
         <Placeholder
           header="Новых слов нет"
-          description="Ты разобрал весь общий словарь. Пришли боту своё слово."
+          description={deck ? `Все слова набора «${deck}» уже у тебя в карточках.` : 'Ты разобрал весь общий словарь. Пришли боту своё слово.'}
           className="screen"
         />
       );
