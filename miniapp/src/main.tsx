@@ -18,7 +18,7 @@ if (!root) throw new Error('нет #root в index.html');
 
 // Вне Telegram API всё равно ответит отказом: незачем рисовать пустой экран.
 if (!initData) {
-  root.textContent = 'Откройте мини-апп через бота @vocab_srs_bot в Telegram.';
+  root.textContent = 'Откройте мини-апп через бота в Telegram.';
 } else {
   createRoot(root).render(
     <StrictMode>
