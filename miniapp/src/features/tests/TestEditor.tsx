@@ -180,7 +180,7 @@ function AiImport({ onLines }: { onLines: (lines: ConvertedLine[]) => void }) {
 
   return (
     <Section header="Готовая контрольная"
-      footer="Вставь текст или выбери файл Word / .txt. ИИ найдёт пропуски и ответы и добавит строки в поле выше. Разбор занимает до пары минут.">
+      footer="Вставь текст или выбери файл Word / .txt. ИИ найдёт пропуски и ответы и добавит строки в поле выше. Большая контрольная разбирается несколько минут — не закрывай приложение.">
       <Textarea rows={4} value={source} placeholder="1. She (not like) coffee. — doesn't like" onChange={(e) => setSource(e.target.value)} />
       <div className="t-format">
         <label className="t-file">
