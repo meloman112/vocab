@@ -1,6 +1,7 @@
 """Классы и тесты учителя. Ответы проверяет сервер: ключ не уходит ученику
 до срока, иначе его было бы видно в мини-аппе."""
 
+import asyncio
 import base64
 import binascii
 import logging
@@ -86,9 +87,15 @@ async def preview_test(body: schemas.TestText) -> schemas.TestPreview:
     return schemas.TestPreview(questions=questions, errors=errors)
 
 
-@router.post("/teacher/tests/convert", response_model=list[schemas.ConvertedLine],
+# ИИ разбирает контрольную дольше минуты, а прокси перед сервером рвёт запрос
+# на 60 с, поэтому разбор идёт в фоне, а мини-апп опрашивает результат.
+# Процесс API один, так что словаря в памяти хватает.
+_jobs: dict[str, asyncio.Task[list[schemas.ConvertedLine]]] = {}
+
+
+@router.post("/teacher/tests/convert", response_model=schemas.ConvertJob,
              dependencies=[Depends(teacher_user)])
-async def convert_test(body: schemas.ConvertIn) -> list[schemas.ConvertedLine]:
+async def convert_test(body: schemas.ConvertIn) -> schemas.ConvertJob:
     """Готовая контрольная учителя (текст или .docx) → строки теста через ИИ."""
     text = body.text.strip()
     if body.docx:
@@ -98,12 +105,30 @@ async def convert_test(body: schemas.ConvertIn) -> list[schemas.ConvertedLine]:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Это не файл Word (.docx)") from exc
     if not text:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Пустой текст: вставь контрольную или выбери файл")
+    job = secrets.token_urlsafe(16)
+    _jobs[job] = asyncio.create_task(_convert(text[:20000]))
+    return schemas.ConvertJob(job=job)
+
+
+@router.get("/teacher/tests/convert/{job}", response_model=list[schemas.ConvertedLine] | None,
+            dependencies=[Depends(teacher_user)])
+async def convert_result(job: str) -> list[schemas.ConvertedLine] | None:
+    """null — ИИ ещё думает."""
+    task = _jobs.get(job)
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Разбор потерялся, запусти ещё раз")
+    if not task.done():
+        return None
+    del _jobs[job]
     try:
-        rows = await enrich.convert_test(settings(), text[:20000])
+        return task.result()
     except enrich.EnrichError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "ИИ сейчас не отвечает, попробуй чуть позже.") from exc
+
+
+async def _convert(text: str) -> list[schemas.ConvertedLine]:
     out = []
-    for r in rows:
+    for r in await enrich.convert_test(settings(), text):
         try:
             classwork.parse_line(r["line"])
             error = ""

@@ -108,7 +108,15 @@ export const api = {
     test: (id: number) => request<TestReport>(`/teacher/tests/${id}`),
     preview: (text: string, signal?: AbortSignal) =>
       request<TestPreview>('/teacher/tests/preview', { method: 'POST', body: JSON.stringify({ text }), signal }),
-    convert: (source: { text?: string; docx?: string }) => send<ConvertedLine[]>('POST', '/teacher/tests/convert', source),
+    /** ИИ думает дольше минуты, а прокси рвёт запрос на 60 с — поэтому запуск и опрос. */
+    convert: async (source: { text?: string; docx?: string }) => {
+      const { job } = await send<{ job: string }>('POST', '/teacher/tests/convert', source);
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const lines = await request<ConvertedLine[] | null>(`/teacher/tests/convert/${job}`);
+        if (lines) return lines;
+      }
+    },
     createTest: (test: { title: string; class_id: number; due: string; text: string }) =>
       send<{ id: number; sent: number }>('POST', '/teacher/tests', test),
     acceptAnswer: (testId: number, gap: number, answer: string) =>

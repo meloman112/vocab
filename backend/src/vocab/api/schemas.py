@@ -478,6 +478,10 @@ class ConvertIn(BaseModel):
     docx: str = Field(default="", max_length=4_000_000)
 
 
+class ConvertJob(BaseModel):
+    job: str
+
+
 class ConvertedLine(BaseModel):
     line: str
     guessed: bool
