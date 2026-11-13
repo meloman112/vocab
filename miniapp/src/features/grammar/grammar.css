@@ -709,3 +709,21 @@
     }
   }
 }
+
+.g-recheck {
+  display: block;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px dashed var(--g-line);
+  border-radius: 9px;
+  font: 500 13px var(--tgui--font-family);
+  color: var(--g-ink);
+  background: none;
+  cursor: pointer;
+}
+
+.g-ai {
+  margin-top: 6px;
+  font-size: 13px;
+  font-style: italic;
+}

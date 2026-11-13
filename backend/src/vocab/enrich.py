@@ -79,6 +79,17 @@ guessed: true, а в note коротко по-русски объясни, чт�
 {"questions": [{"line": "...", "guessed": false, "note": ""}]}.
 """
 
+RECHECK_PROMPT = """\
+Ты проверяешь упражнение по грамматике английского. Тебе пришлют задание,
+предложение с пропуском (подсказка в скобках), ответ из ключа и ответ
+ученика. Ключ иногда знает не все верные ответы. Реши, верен ли ответ
+ученика в этом предложении: грамматически правильный, подходит по смыслу
+и выполняет задание (то время, тот глагол). Опечатка — это неверно.
+
+Отвечай только JSON-объектом {"ok": true|false, "why": "..."}, в why —
+одно-два коротких предложения по-русски для ученика.
+"""
+
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
 # Локальная Qwen на общем сервере: карточка генерируется ~50 с, а занятый
@@ -231,3 +242,23 @@ async def convert_test(cfg: Settings, text: str) -> list[dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001 — причина уходит в лог, итог — в EnrichError
         log.warning("ИИ: контрольная не разобрана: %s", exc)
         raise EnrichError("ИИ не разобрал контрольную") from exc
+
+
+def parse_recheck(content: str) -> dict[str, Any]:
+    data = json.loads(content)
+    if not isinstance(data.get("ok"), bool):
+        raise ValueError("в ответе модели нет ok")
+    return {"ok": data["ok"], "why": " ".join(str(data.get("why") or "").split())}
+
+
+async def recheck(cfg: Settings, task: str, sentence: str, key: list[str], answer: str) -> dict[str, Any]:
+    """Второе мнение по ответу, который движок тетради не принял. Одна
+    попытка: прокси рвёт запрос на 60 с, а ученик и так может нажать ещё раз."""
+    if not cfg.deepseek_api_key:
+        raise EnrichError("DEEPSEEK_API_KEY пуст")
+    text = f"Задание: {task}\nПредложение: {sentence}\nКлюч: {' / '.join(key)}\nУченик: {answer}"
+    try:
+        return parse_recheck(await _chat(cfg, RECHECK_PROMPT, text, httpx.Timeout(50.0)))
+    except Exception as exc:  # noqa: BLE001 — причина уходит в лог, итог — в EnrichError
+        log.warning("ИИ: перепроверка %r не удалась: %s", text, exc)
+        raise EnrichError("ИИ не ответил") from exc

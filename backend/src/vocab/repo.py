@@ -630,6 +630,14 @@ async def grammar_accepted(conn: asyncpg.Connection) -> list[asyncpg.Record]:
     return await conn.fetch("select item, slot, answer from grammar_accepted")
 
 
+async def accept_answer(conn: asyncpg.Connection, item: str, slot: int, answer: str) -> None:
+    """Ответ засчитал ИИ: added_by пуст, учитель отличит его от своих."""
+    await conn.execute(
+        "insert into grammar_accepted (item, slot, answer) values ($1, $2, $3) on conflict do nothing",
+        item, slot, answer,
+    )
+
+
 async def save_grammar_attempt(
     conn: asyncpg.Connection,
     user_id: int,

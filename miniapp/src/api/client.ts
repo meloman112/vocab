@@ -5,6 +5,7 @@ import type {
   Card,
   CommonMistake,
   GrammarAttempt,
+  RecheckOut,
   GrammarContent,
   GrammarProgress,
   Leaderboard,
@@ -93,6 +94,8 @@ export const api = {
     content: () => request<GrammarContent>('/grammar/content'),
     progress: () => request<GrammarProgress>('/grammar/progress'),
     attempt: (attempt: GrammarAttempt) => send<void>('POST', '/grammar/attempts', attempt),
+    recheck: (body: { item: string; slot: number; answer: string; key: string[] }) =>
+      send<RecheckOut>('POST', '/grammar/recheck', body),
     import: (items: Record<string, unknown>) => send<{ imported: number }>('POST', '/grammar/import', { items }),
     pdf: (exercises: PdfExercise[]) => send<void>('POST', '/grammar/pdf', { exercises }),
   },

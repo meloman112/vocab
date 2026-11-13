@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from vocab.enrich import _parse_as, parse_phrases, parse_translation, parse_word
+from vocab.enrich import _parse_as, parse_phrases, parse_recheck, parse_translation, parse_word
 
 
 def test_translation_is_trimmed():
@@ -92,3 +92,12 @@ def test_requested_part_of_speech_is_enforced():
     assert _parse_as("verb")(json.dumps(FULL))["pos"] == "verb"
     with pytest.raises(ValueError):
         _parse_as("noun")(json.dumps(FULL))
+
+
+def test_recheck_verdict_is_parsed():
+    assert parse_recheck('{"ok": true, "why": "  Тоже  верно: процесс. "}') == {"ok": True, "why": "Тоже верно: процесс."}
+
+
+def test_recheck_without_verdict_raises():
+    with pytest.raises(ValueError):
+        parse_recheck('{"why": "не знаю"}')

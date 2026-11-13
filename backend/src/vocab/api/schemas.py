@@ -303,6 +303,19 @@ class GrammarAttempt(BaseModel):
     mistakes: list[GrammarMistake] = Field(default=[], max_length=50)
 
 
+class Recheck(BaseModel):
+    item: str = Field(pattern=r"^\d{1,3}-\d{1,3}$")
+    slot: int = Field(ge=0, le=30)
+    answer: str = Field(min_length=1, max_length=100)
+    # Ключ строит движок мини-аппа, у сервера его нет.
+    key: list[str] = Field(min_length=1, max_length=10)
+
+
+class RecheckOut(BaseModel):
+    ok: bool
+    why: str
+
+
 class GrammarResult(BaseModel):
     clean: bool
     was_wrong: bool

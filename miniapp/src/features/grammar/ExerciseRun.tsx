@@ -1,6 +1,7 @@
 import { Button } from '@telegram-apps/telegram-ui';
 import { Fragment, useEffect, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
+import { api } from '../../api/client';
 import type { GrammarMistakeIn } from '../../api/types';
 import { celebrate } from '../../lib/celebrate';
 import { shuffle } from '../../lib/shuffle';
@@ -21,7 +22,8 @@ function loadMode(): Mode {
   }
 }
 
-type Bad = Diagnosis & { j: number };
+/** value — что ввёл ученик; ai — ответ ИИ, если ученик попросил перепроверить. */
+type Bad = Diagnosis & { j: number; value: string; ai?: string };
 
 /** Состояние одного задания в этом заходе: что введено, что разобрано. */
 interface Session {
@@ -124,7 +126,7 @@ export function ExerciseRun(props: RunProps) {
         s.vals[j] = value.trim();
         return;
       }
-      s.bad.push({ j, ...d });
+      s.bad.push({ j, value: value.trim(), ...d });
       if (d.why !== 'Пусто.') s.log.push({ slot: j, answer: value.trim().slice(0, 300), why: `${d.why} ${d.more ?? ''}`.trim() });
     });
     if (s.bad.some((b) => b.why !== 'Пусто.')) {
@@ -145,6 +147,32 @@ export function ExerciseRun(props: RunProps) {
       toast('Не сохранилось — проверь интернет');
     });
     s.log = [];
+  }
+
+  function recheck(b: Bad) {
+    b.ai = 'ИИ проверяет…';
+    rerender();
+    api.grammar.recheck({ item: key, slot: b.j, answer: b.value, key: slots[b.j]!.ans }).then(
+      (r) => {
+        b.ai = r.why || 'Ключ верный.';
+        if (r.ok) {
+          s.done[b.j] = true;
+          s.vals[b.j] = b.value;
+          s.bad = s.bad.filter((x) => x !== b);
+          // Засчитанный ответ — не ошибка: ни учителю, ни в работу над ошибками.
+          s.log = s.log.filter((m) => m.slot !== b.j || m.answer !== b.value);
+          if (!s.log.length) s.errors = 0;
+          toast(`ИИ засчитал ответ. ${r.why}`);
+          if (s.done.every(Boolean)) finish();
+        }
+        rerender();
+      },
+      (e: Error) => {
+        b.ai = undefined;
+        toast(e.message);
+        rerender();
+      },
+    );
   }
 
   function next() {
@@ -236,6 +264,7 @@ export function ExerciseRun(props: RunProps) {
         <FeedbackView s={s} slots={slots} fresh={s.fresh} clean={progress.results[key]?.clean}
           rule={ruleFor(book, ex, s.bad.find((b) => b.rule)?.rule, slots.find((x) => x.tense)?.tense)}
           onHint={(n) => { s.hints = n; rerender(); }}
+          onRecheck={recheck}
           onShow={() => { for (const b of s.bad) s.shown[b.j] = true; s.hints = 3; rerender(); }} />
       </section>
 
@@ -392,10 +421,11 @@ interface FeedbackProps {
   rule: ReturnType<typeof ruleFor>;
   onHint: (n: number) => void;
   onShow: () => void;
+  onRecheck: (b: Bad) => void;
 }
 
 /** Подсказки лесенкой: правило из Grammar book → формула → ответ красной ручкой. */
-function FeedbackView({ s, slots, fresh, clean, rule, onHint, onShow }: FeedbackProps) {
+function FeedbackView({ s, slots, fresh, clean, rule, onHint, onShow, onRecheck }: FeedbackProps) {
   if (s.done.every(Boolean)) {
     if (!fresh) return <div className="g-fb ok">{clean ? 'Сделано с первого раза ✓' : 'Сделано, была ошибка'}</div>;
     const slipped = s.errors || s.shown.some(Boolean);
@@ -411,6 +441,10 @@ function FeedbackView({ s, slots, fresh, clean, rule, onHint, onShow }: Feedback
         <div key={b.j} className="g-why">
           {slots.length > 1 && <small>{bracketLabel(slots[b.j]!) || `Пропуск ${b.j + 1}`}</small>}
           {b.why} <span>{b.more}</span>
+          {b.why !== 'Пусто.' && !s.shown[b.j] && (
+            b.ai ? <div className="g-ai">{b.ai}</div>
+              : <button type="button" className="g-recheck" onClick={() => onRecheck(b)}>Я прав — пусть ИИ проверит</button>
+          )}
         </div>
       ))}
       {!onlyEmpty && rule && (

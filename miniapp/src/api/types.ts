@@ -180,6 +180,11 @@ export interface GrammarMistakeIn {
   why: string;
 }
 
+export interface RecheckOut {
+  ok: boolean;
+  why: string;
+}
+
 export interface GrammarAttempt {
   item: string;
   clean: boolean;

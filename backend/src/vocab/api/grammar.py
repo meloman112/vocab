@@ -9,7 +9,7 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 
-from .. import grammar, repo
+from .. import enrich, grammar, repo
 from ..config import settings
 from ..grammar import pdf
 from . import schemas
@@ -74,6 +74,30 @@ async def post_attempt(
             conn, user_id, body.item, body.clean, [a.strip() for a in body.answers],
             [(m.slot, m.answer.strip(), m.why) for m in body.mistakes], settings().tz,
         )
+
+
+@router.post("/grammar/recheck", response_model=schemas.RecheckOut)
+async def recheck(
+    body: schemas.Recheck, request: Request, _: int = Depends(current_user)
+) -> schemas.RecheckOut:
+    """Ученик считает, что движок зря не принял ответ. Если ИИ согласен,
+    ответ засчитывается всем — как ответ, принятый учителем."""
+    item = _known(body.item)
+    if body.slot >= item.slots:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "нет такого пропуска")
+    answer = " ".join(body.answer.split())
+    sentence = grammar.plain(item.text)
+    if item.slots > 1:
+        sentence += f" (проверяем пропуск №{body.slot + 1})"
+    try:
+        verdict = await enrich.recheck(settings(), grammar.content().exercises[item.exercise],
+                                       sentence, body.key, answer)
+    except enrich.EnrichError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "ИИ не ответил, попробуй ещё раз") from exc
+    if verdict["ok"]:
+        async with request.app.state.pool.acquire() as conn:
+            await repo.accept_answer(conn, body.item, body.slot, answer)
+    return schemas.RecheckOut(**verdict)
 
 
 @router.post("/grammar/import", response_model=schemas.ImportOut)

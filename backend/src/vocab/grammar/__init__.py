@@ -23,6 +23,7 @@ class Item:
     n: int
     slots: int
     topic: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ def content() -> Content:
             for i, text in enumerate(ex["items"]):
                 # Ключ — как в прежнем мини-аппе: упражнение и индекс с нуля.
                 key = f"{ex['id']}-{i}"
-                items[key] = Item(key, ex["id"], i + 1, len(SLOT.findall(text)), topic["id"])
+                items[key] = Item(key, ex["id"], i + 1, len(SLOT.findall(text)), topic["id"], text)
     # Отдаём одними и теми же байтами: ETag избавляет телефон от повторной
     # загрузки ~400 КБ при каждом открытии тетради.
     etag = '"' + hashlib.sha256(raw).hexdigest()[:16] + '"'

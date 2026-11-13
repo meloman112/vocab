@@ -192,6 +192,8 @@ export function norm(s: string, commas = false): string {
     .replace(/\bi'm\b/g, 'i am').replace(/'re\b/g, ' are').replace(/'ve\b/g, ' have')
     .replace(/'ll\b/g, ' will').replace(/\bwon't\b/g, 'will not').replace(/\bcan't\b/g, 'can not')
     .replace(/\bcannot\b/g, 'can not').replace(/\bshan't\b/g, 'shall not').replace(/n't\b/g, ' not')
+    // На телефоне апостроф часто теряют: didnt — то же did not.
+    .replace(/\b(do|does|did|is|are|was|were|has|have|had|would|could|should)nt\b/g, '$1 not')
     .replace(/\b(travel|cancel|label|model|signal|quarrel|level|fuel)l(ed|ing)\b/g, '$1$2')
     .replace(/\b(real|recogn|apolog|organ|critic|summar|emphas|memor|special|practi)is(e|es|ed|ing)\b/g, '$1iz$2')
     .replace(/\bpractis/g, 'practic').replace(/\bcentre\b/g, 'center').replace(/\bcolour/g, 'color')
