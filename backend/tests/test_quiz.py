@@ -3,7 +3,7 @@
 
 import random
 
-from vocab.quiz import BLANK, choices, cloze
+from vocab.quiz import BLANK, choices, cloze, spread
 
 CARD = {"word": "big", "translation": "большой, крупный", "pos": "adjective"}
 POOL = [
@@ -46,3 +46,13 @@ def test_cloze_inflects_phrase_head():
 
 def test_cloze_ignores_word_inside_other_word():
     assert cloze("cat", "", [{"en": "A category of things.", "ru": "-"}]) is None
+
+
+def test_spread_keeps_synonyms_apart():
+    rows = [{"translation": "откладывать"}, {"translation": "откладывать, отпугивать"}, {"translation": "слышать"}]
+    assert [r["translation"] for r in spread(rows)] == ["откладывать", "слышать", "откладывать, отпугивать"]
+
+
+def test_spread_keeps_order_when_no_choice():
+    rows = [{"translation": "книга"}, {"translation": "книга, том"}]
+    assert spread(rows) == rows

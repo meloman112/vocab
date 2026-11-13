@@ -5,6 +5,7 @@ import type { Card } from '../../api/types';
 import { canSpeak, speak } from '../../lib/speech';
 import { irregularPattern, POS_HINTS, title } from '../../lib/word';
 import { ReportButton } from '../report/ReportButton';
+import { LeechNote } from './LeechNote';
 
 interface Props {
   card: Card;
@@ -96,6 +97,7 @@ export function CardFace({ card, flipped, onFlip }: Props) {
               <Caption className="card__example-ru">{example.ru}</Caption>
             </Fragment>
           ))}
+          <LeechNote key={card.id} card={card} />
           <Caption className="card__pos">
             ⭐ {card.top} · учат: {card.learners}
           </Caption>

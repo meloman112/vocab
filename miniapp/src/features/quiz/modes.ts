@@ -9,6 +9,8 @@ export interface Mode {
   title: string;
   subtitle: string;
   source: QuizSource;
+  /** Слово вспоминают сами, а не узнают среди вариантов. */
+  recall: boolean;
   /** Годится ли карточка: для выбора нужны хотя бы два варианта. */
   fits: (card: QuizCard) => boolean;
 }
@@ -19,21 +21,21 @@ const always = () => true;
 /** Порядок — от узнавания к воспроизведению: так меню читается как лестница. */
 export const MODES: Mode[] = [
   { id: 'en-ru', icon: '🔤', title: 'Выбери перевод', subtitle: 'Слово → один из 4 переводов',
-    source: 'any', fits: hasRu },
+    source: 'any', recall: false, fits: hasRu },
   { id: 'ru-en', icon: '🔁', title: 'Выбери слово', subtitle: 'Перевод → одно из 4 слов',
-    source: 'any', fits: (card) => card.choices_en.length >= 2 },
+    source: 'any', recall: false, fits: (card) => card.choices_en.length >= 2 },
   { id: 'pairs', icon: '🧩', title: 'Пары', subtitle: 'Соедини 5 слов с переводами',
-    source: 'any', fits: always },
+    source: 'any', recall: false, fits: always },
   ...(canSpeak
     ? [{ id: 'listen', icon: '🎧', title: 'На слух', subtitle: 'Слушаешь и выбираешь перевод',
-         source: 'any', fits: hasRu } satisfies Mode]
+         source: 'any', recall: false, fits: hasRu } satisfies Mode]
     : []),
   { id: 'spell', icon: '⌨️', title: 'Напиши слово', subtitle: 'Перевод → пишешь по-английски',
-    source: 'any', fits: always },
+    source: 'any', recall: true, fits: always },
   { id: 'cloze', icon: '✍️', title: 'Вставь в пример', subtitle: 'Пропуск в предложении',
-    source: 'cloze', fits: (card) => card.cloze !== null },
+    source: 'cloze', recall: true, fits: (card) => card.cloze !== null },
   { id: 'irregular', icon: '⚡', title: 'Неправильные глаголы', subtitle: 'go → went → gone',
-    source: 'irregular', fits: always },
+    source: 'irregular', recall: true, fits: always },
 ];
 
 export function modeById(id: ModeId): Mode {

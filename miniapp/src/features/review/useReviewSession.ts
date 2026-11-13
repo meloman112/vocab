@@ -18,8 +18,8 @@ export function useReviewSession(deck?: string) {
     async (source: () => ReturnType<typeof api.queue>, whenEmpty: 'empty' | 'exhausted') => {
       dispatch({ type: 'loading' });
       try {
-        const { cards } = await source();
-        dispatch({ type: 'loaded', cards, whenEmpty });
+        const { cards, new_left } = await source();
+        dispatch({ type: 'loaded', cards, whenEmpty: new_left === 0 ? 'enough' : whenEmpty });
       } catch (error) {
         dispatch({ type: 'failed', error: (error as Error).message });
       }
@@ -53,7 +53,7 @@ export function useReviewSession(deck?: string) {
       // Ответ уходит фоном, по одному. Восстанавливать порядок или
       // повторять запрос не пытаемся: потерянная оценка стоит одного
       // лишнего повторения, а очередь ретраев — целого слоя кода.
-      const sent = api.review(card.id, rating).catch(() => {
+      const sent = api.review(card.id, rating, 'card').catch(() => {
         notify('error');
         dispatch({ type: 'syncError' });
       });

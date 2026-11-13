@@ -1,7 +1,8 @@
 import type { Card, Rating } from '../../api/types';
 
-/** empty — свои слова кончились; exhausted — и в общем словаре новых нет. */
-export type Phase = 'loading' | 'error' | 'empty' | 'exhausted' | 'review' | 'done';
+/** empty — свои слова кончились; exhausted — и в общем словаре новых нет;
+ * enough — новых на сегодня уже взято сколько можно. */
+export type Phase = 'loading' | 'error' | 'empty' | 'exhausted' | 'enough' | 'review' | 'done';
 
 export interface SessionState {
   phase: Phase;
@@ -17,7 +18,7 @@ export interface SessionState {
 
 export type SessionAction =
   | { type: 'loading' }
-  | { type: 'loaded'; cards: Card[]; whenEmpty: 'empty' | 'exhausted' }
+  | { type: 'loaded'; cards: Card[]; whenEmpty: 'empty' | 'exhausted' | 'enough' }
   | { type: 'failed'; error: string }
   | { type: 'flip' }
   | { type: 'rate'; rating: Rating }

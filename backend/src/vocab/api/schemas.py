@@ -16,9 +16,18 @@ class AddWord(BaseModel):
     as_is: bool = False
 
 
+ReviewMode = Literal["card", "en-ru", "ru-en", "pairs", "listen", "spell", "cloze", "irregular", "poll"]
+
+
 class Review(BaseModel):
     card_id: int
     rating: int = Field(ge=1, le=4)
+    # None — старый мини-апп из кэша Telegram, он режим не шлёт.
+    mode: ReviewMode | None = None
+
+
+class Note(BaseModel):
+    note: str = Field(max_length=300)
 
 
 class Example(BaseModel):
@@ -53,6 +62,9 @@ class CardOut(BaseModel):
     # вводом, а свежие — выбором из вариантов.
     state: int
     due: datetime
+    note: str | None
+    # Сколько раз слово забывали: от LEECH_LAPSES просим свою ассоциацию.
+    lapses: int
 
 
 class OtherSense(BaseModel):
@@ -119,6 +131,8 @@ LookupOut = Annotated[WordLookup | TextLookup, Field(discriminator="kind")]
 
 class QueueOut(BaseModel):
     cards: list[CardOut]
+    # Только у /discover: сколько новых слов ещё можно взять сегодня.
+    new_left: int | None = None
 
 
 class ReviewOut(BaseModel):

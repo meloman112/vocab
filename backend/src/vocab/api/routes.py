@@ -17,6 +17,9 @@ log = logging.getLogger(__name__)
 FORECAST_DAYS = 7
 # Сколько новых слов из общего словаря выдаётся за одно «Давай».
 DISCOVER_LIMIT = 10
+# Новых слов в день, считая свои: 41 за день у живого ученика дали четверть
+# «не помню» назавтра. 15 — потолок, при котором слова ещё держатся.
+NEW_PER_DAY = 15
 LEADERBOARD_SIZE = 10
 # Неправильных вариантов с запасом: часть отсеется как синонимы и та же лемма.
 DISTRACTOR_POOL = 200
@@ -100,7 +103,7 @@ def _cards_out(rows) -> schemas.QueueOut:
             top=lexicon.rank_label(row["zipf"], row["level"]),
             remembered_due=srs.review(row, srs.REMEMBERED)["due"],
         )
-        for row in rows
+        for row in quiz.spread(rows)
     ])
 
 
@@ -119,8 +122,11 @@ async def discover(
 ) -> schemas.QueueOut:
     """Новые слова из общего словаря (или из набора deck), сразу карточками."""
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.discover(conn, user_id, DISCOVER_LIMIT, deck)
-    return _cards_out(rows)
+        left = NEW_PER_DAY - await repo.new_today(conn, user_id, settings().tz)
+        rows = await repo.discover(conn, user_id, min(DISCOVER_LIMIT, left), deck) if left > 0 else []
+    out = _cards_out(rows)
+    out.new_left = max(0, left - len(rows))
+    return out
 
 
 @router.post("/review", response_model=schemas.ReviewOut)
@@ -133,12 +139,22 @@ async def post_review(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "карточка не найдена")
         updated = srs.review(card, body.rating)
         await repo.apply_review(
-            conn, user_id, body.card_id, body.rating, updated, settings().tz
+            conn, user_id, body.card_id, body.rating, body.mode, updated, settings().tz
         )
 
     return schemas.ReviewOut(
         card_id=body.card_id, due=updated["due"], state=updated["state"]
     )
+
+
+@router.put("/cards/{card_id}/note", status_code=status.HTTP_204_NO_CONTENT)
+async def put_note(
+    card_id: int, body: schemas.Note, request: Request, user_id: int = Depends(current_user)
+) -> None:
+    """Своя ассоциация к слову, которое не держится. Пустая — стереть."""
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.set_note(conn, user_id, card_id, body.note.strip() or None):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "карточка не найдена")
 
 
 @router.put("/cards/{card_id}/known", status_code=status.HTTP_204_NO_CONTENT)
@@ -172,7 +188,7 @@ async def get_quiz(
         pool = await repo.distractors(conn, DISTRACTOR_POOL)
     rng = random.Random()
     cards = []
-    for row in rows:
+    for row in quiz.spread(rows):
         gap = quiz.cloze(row["word"], row["forms"], row["examples"])
         if mode == "cloze" and gap is None:
             continue

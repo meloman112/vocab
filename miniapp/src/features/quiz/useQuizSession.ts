@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { QuizCard, Rating } from '../../api/types';
 import { notify } from '../../lib/telegram';
-import { WRONG } from './check';
+import { ALMOST, WRONG } from './check';
 import type { Mode } from './modes';
 
 export const QUIZ_SIZE = 10;
@@ -68,7 +68,9 @@ export function useQuizSession(mode: Mode) {
   const finish = useCallback(
     (results: Result[]) => {
       for (const { card, rating } of results) {
-        const sent = api.review(card.id, rating).catch(() => {
+        // Угадать из четырёх — не вспомнить: такое «верно» для FSRS только Hard,
+        // иначе слово уходит надолго и забывается до следующей встречи.
+        const sent = api.review(card.id, mode.recall ? rating : (Math.min(rating, ALMOST) as Rating), mode.id).catch(() => {
           notify('error');
           setSyncErrors((n) => n + 1);
         });
@@ -80,7 +82,7 @@ export function useQuizSession(mode: Mode) {
       setIndex(next);
       if (next >= items.length) setPhase('done');
     },
-    [index, items.length],
+    [index, items.length, mode],
   );
 
   const settled = useCallback(() => Promise.all(pending.current), []);

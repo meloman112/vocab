@@ -21,6 +21,18 @@ def meanings(translation: str) -> set[str]:
     return {m.strip().lower() for m in re.split(r"[,;]", translation) if m.strip()}
 
 
+def spread(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Тот же порядок, но слова с общим переводом не идут подряд:
+    postpone и put off («откладывать») рядом путаются и учатся хуже."""
+    rest, out = list(rows), []
+    while rest:
+        last = meanings(out[-1]["translation"]) if out else set()
+        pick = next((r for r in rest if not meanings(r["translation"]) & last), rest[0])
+        rest.remove(pick)
+        out.append(pick)
+    return out
+
+
 def choices(
     card: Mapping[str, Any], pool: Sequence[Mapping[str, Any]], field: str, rng: random.Random
 ) -> list[str]:

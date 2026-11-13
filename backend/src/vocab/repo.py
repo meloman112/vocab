@@ -12,7 +12,8 @@ CARD_SELECT = """
            w.irregular, w.examples, w.zipf, w.level, w.deck, w.topic,
            (select count(*) from cards l where l.word_id = w.id) as learners,
            exists (select 1 from words o where o.lemma = w.lemma and o.id <> w.id) as homonym,
-           c.state, c.step, c.stability, c.difficulty, c.due, c.last_review
+           c.state, c.step, c.stability, c.difficulty, c.due, c.last_review, c.note,
+           (select count(*) from reviews r where r.card_id = c.id and r.rating = 1) as lapses
     from cards c join words w on w.id = c.word_id
 """
 
@@ -240,6 +241,22 @@ async def discover(
     )
 
 
+async def new_today(conn: asyncpg.Connection, user_id: int, tz: str) -> int:
+    """Сколько слов сегодня пришло в карточки: и своих, и из словаря."""
+    return await conn.fetchval(
+        "select count(*) from cards where user_id = $1"
+        " and (created_at at time zone $2)::date = (now() at time zone $2)::date",
+        user_id, tz,
+    )
+
+
+async def set_note(conn: asyncpg.Connection, user_id: int, card_id: int, note: str | None) -> bool:
+    result = await conn.execute(
+        "update cards set note = $3 where id = $1 and user_id = $2", card_id, user_id, note
+    )
+    return result != "UPDATE 0"
+
+
 async def get_card(
     conn: asyncpg.Connection, user_id: int, card_id: int
 ) -> asyncpg.Record | None:
@@ -266,6 +283,7 @@ async def apply_review(
     user_id: int,
     card_id: int,
     rating: int,
+    mode: str | None,
     fsrs: dict[str, Any],
     tz: str,
 ) -> None:
@@ -288,7 +306,7 @@ async def apply_review(
             fsrs["last_review"],
         )
         await conn.execute(
-            "insert into reviews (card_id, rating) values ($1, $2)", card_id, rating
+            "insert into reviews (card_id, rating, mode) values ($1, $2, $3)", card_id, rating, mode
         )
         await touch_streak(conn, user_id, tz)
 

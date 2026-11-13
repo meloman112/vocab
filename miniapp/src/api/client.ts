@@ -29,6 +29,7 @@ import type {
   TestReport,
   TestRow,
 } from './types';
+import type { ModeId } from '../features/quiz/modes';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(path), {
@@ -60,18 +61,21 @@ function send<T>(method: string, path: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
-  queue: () => request<{ cards: Card[] }>('/queue'),
+  queue: () => request<{ cards: Card[]; new_left?: number | null }>('/queue'),
 
   /** Новые слова из общего словаря — сервер сразу заводит на них карточки. */
   discover: (deck?: string) =>
-    request<{ cards: Card[] }>(deck ? `/discover?deck=${encodeURIComponent(deck)}` : '/discover', { method: 'POST' }),
+    request<{ cards: Card[]; new_left?: number | null }>(deck ? `/discover?deck=${encodeURIComponent(deck)}` : '/discover', { method: 'POST' }),
 
   stats: () => request<Stats>('/stats'),
 
   leaderboard: () => request<Leaderboard>('/leaderboard'),
 
-  review: (cardId: number, rating: Rating) =>
-    send<ReviewResult>('POST', '/review', { card_id: cardId, rating }),
+  /** mode — карточка или режим теста: по нему видно, чем пользуются. */
+  review: (cardId: number, rating: Rating, mode: 'card' | ModeId) =>
+    send<ReviewResult>('POST', '/review', { card_id: cardId, rating, mode }),
+
+  note: (cardId: number, note: string) => send<void>('PUT', `/cards/${cardId}/note`, { note }),
 
   known: (cardId: number) => send<void>('PUT', `/cards/${cardId}/known`),
 

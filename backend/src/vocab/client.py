@@ -53,8 +53,8 @@ class VocabAPI:
         body = await self._call("GET", "/quiz", tg_id, params={"limit": limit})
         return body["cards"]
 
-    async def review(self, tg_id: int, card_id: int, rating: int) -> None:
-        await self._call("POST", "/review", tg_id, json={"card_id": card_id, "rating": rating})
+    async def review(self, tg_id: int, card_id: int, rating: int, mode: str) -> None:
+        await self._call("POST", "/review", tg_id, json={"card_id": card_id, "rating": rating, "mode": mode})
 
     async def report(self, tg_id: int, word_id: int, reason: str) -> None:
         await self._call("POST", "/reports", tg_id, json={"word_id": word_id, "reason": reason})

@@ -86,6 +86,15 @@ function Phase({
         />
       );
 
+    case 'enough':
+      return (
+        <Placeholder
+          header="На сегодня новых хватит"
+          description="15 новых слов в день — больше в памяти не держится. Повтори взятые, завтра будут новые."
+          className="screen"
+        />
+      );
+
     case 'review': {
       const card = state.cards[state.index];
       // Индекс за пределами массива недостижим: reducer переводит

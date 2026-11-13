@@ -251,7 +251,7 @@ async def quiz_answer(answer: PollAnswer, bot: Bot, api: VocabAPI) -> None:
         return
     tg_id, card_id, correct = asked
     right = answer.option_ids == [correct]
-    await api.review(tg_id, card_id, RIGHT if right else WRONG)
+    await api.review(tg_id, card_id, RIGHT if right else WRONG, "poll")
     session = quizzes.get(tg_id)
     if session is None:
         return
@@ -260,9 +260,10 @@ async def quiz_answer(answer: PollAnswer, bot: Bot, api: VocabAPI) -> None:
     await send_question(bot, tg_id)
 
 
-# Сколько вопросов в одном /quiz и какие оценки FSRS ставит ответ.
+# Сколько вопросов в одном /quiz и какие оценки FSRS ставит ответ. Верно
+# здесь — Hard, а не Good: опрос — выбор из вариантов, узнать не значит вспомнить.
 QUIZ_SIZE = 10
-RIGHT, WRONG = 3, 1
+RIGHT, WRONG = 2, 1
 # Лимиты Telegram на опрос.
 POLL_QUESTION, POLL_OPTION, POLL_EXPLANATION = 300, 100, 200
 
