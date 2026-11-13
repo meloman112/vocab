@@ -37,6 +37,8 @@ def create_app() -> FastAPI:
     logging.basicConfig(
         level=cfg.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
+    # httpx пишет каждый запрос с URL, а в URL Bot API — токен бота.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     mcp_app = build_mcp_app(cfg)
 

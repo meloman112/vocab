@@ -8,6 +8,7 @@ from typing import Any
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from ..client import VocabAPI
 from ..config import Settings
@@ -85,6 +86,14 @@ async def warmups(widgets: Widgets, api: VocabAPI) -> None:
             log.warning("не отправил разминку %s: %s", target["tg_id"], exc)
 
 
+async def keep_warm(bot: Bot, widgets: Widgets) -> None:
+    """Пинг Telegram, чтобы соединения не простаивали: Telegram держит
+    простаивающее соединение 3–7 минут, а новое с test_moe — до 3 с,
+    и их ждал бы первый тап в виджете после паузы."""
+    await bot.get_me()
+    await widgets.call("getMe")
+
+
 def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=cfg.tz)
     # Последнее напоминание дня — «вечернее»: в нём спасаем серию.
@@ -104,6 +113,7 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) ->
     for hour in cfg.warmup_hour_list:
         scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api),
                           id=f"warmup-{hour}", misfire_grace_time=300)
+    scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()
     log.info("напоминания в %s, разминки в %s (%s)", cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)
     return scheduler

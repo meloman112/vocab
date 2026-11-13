@@ -1,7 +1,7 @@
 <div id="app"><p class="h">Загружаю тест…</p></div>
 <script>
 const app=$('#app');let q;
-function next(r){setTimeout(()=>show(r),700)}
+
 function show(r){
   q=r;app.textContent='';
   if(q.end===null){app.append(h('p',null,'Тест устарел — набери /quiz заново.'));return}
@@ -9,7 +9,7 @@ function show(r){
   app.append(h('p','h','🎯 '+q.n[0]+' из '+q.n[1]+(q.k=='s'?' · собери слово':' · как переводится?')),h('div','big',q.q));
   q.k=='c'?choice():spell();
 }
-function send(rating){return ask('a:'+q.id+':'+rating).then(next)}
+function send(rating){const t=new Promise(r=>setTimeout(r,700));ask('a:'+q.id+':'+rating).then(r=>t.then(()=>show(r)))}
 function choice(){
   const col=h('div','col');app.append(col);
   q.o.forEach((o,j)=>col.append(btn(o,null,e=>{

@@ -7,6 +7,7 @@ HTML отправленного виджета не меняется, меняю
 ответом бота на запрос из виджета.
 """
 
+import asyncio
 import json
 import logging
 from collections import defaultdict
@@ -16,11 +17,15 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.types import InlineKeyboardMarkup
 
 log = logging.getLogger(__name__)
 
 TEMPLATES = Path(__file__).resolve().parent / "widgets"
+# Новое соединение с Telegram с test_moe — 0,5–3 с (теряются SYN), повторный
+# запрос — 0,15 с. Поэтому соединения держим открытыми, а не 5 с по умолчанию.
+KEEPALIVE = 600
 # Лимиты Bot API: данные сообщения и ответ на запрос — до 1 КБ.
 MAX_DATA = 1024
 
@@ -51,7 +56,10 @@ def pack(data: Any) -> str:
 
 class Widgets:
     def __init__(self, token: str) -> None:
-        self._client = httpx.AsyncClient(base_url=f"https://api.telegram.org/bot{token}/", timeout=30)
+        self._client = httpx.AsyncClient(
+            base_url=f"https://api.telegram.org/bot{token}/", timeout=30,
+            limits=httpx.Limits(keepalive_expiry=KEEPALIVE),
+        )
         # chat_id → вид виджета → его сообщения. Старые удаляются, когда приходит
         # новое того же вида: в чате остаётся одна разминка, один тест, одна
         # карточка. Память процесса: после перезапуска старые просто останутся.
@@ -68,9 +76,13 @@ class Widgets:
         return body["result"]
 
     async def replace(self, chat_id: int, name: str, data: Any = None, **kwargs: Any) -> int:
-        """Новый виджет name вместо прежних того же вида."""
-        await self.clean(chat_id, name)
-        return await self.send(chat_id, name, data, **kwargs)
+        """Новый виджет name вместо прежних того же вида. Удаление идёт
+        параллельно отправке: каждый вызов Bot API — сотни миллисекунд."""
+        old = self.take(chat_id, name)
+        message_id, _ = await asyncio.gather(
+            self.send(chat_id, name, data, **kwargs), self.delete(chat_id, old)
+        )
+        return message_id
 
     async def send(
         self, chat_id: int, name: str, data: Any = None, *, queries: bool = False,
@@ -88,8 +100,11 @@ class Widgets:
     def track(self, chat_id: int, kind: str, message_id: int) -> None:
         self.messages[chat_id][kind].append(message_id)
 
-    async def clean(self, chat_id: int, kind: str) -> None:
-        ids = self.messages[chat_id].pop(kind, [])
+    def take(self, chat_id: int, kind: str) -> list[int]:
+        """Забирает сообщения вида kind из учёта — их дальше удаляют."""
+        return self.messages[chat_id].pop(kind, [])
+
+    async def delete(self, chat_id: int, ids: list[int]) -> None:
         if not ids:
             return
         try:
@@ -116,3 +131,12 @@ def middleware(handlers: dict[str, Handler]):
         return await handlers[kind](query, data)
 
     return outer
+
+
+class WarmSession(AiohttpSession):
+    """Сессия aiogram с долгим keep-alive: по умолчанию aiohttp закрывает
+    простаивающее соединение через 15 с, и следующий ответ ждёт подключения."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._connector_init["keepalive_timeout"] = KEEPALIVE

@@ -7,7 +7,8 @@ function draw(s){
   const r1=h('div','row');r1.append(tile('🔥'+s.s,'серия, рекорд '+s.b),tile(s.d,'ждут повторения'));
   const r2=h('div','row');r2.append(tile(s.l+'/'+s.t,'выучено'),tile(s.n,'новых сегодня'));
   app.append(r1,r2);
-  const go=(t,kind)=>btn(t,'p',()=>ask('go:'+kind).then(r=>{$('#err').textContent=r.msg||''}));
+  const go=(t,kind)=>btn(t,'p',e=>{const b=e.target,was=b.textContent;b.textContent='…';b.disabled=true;
+    ask('go:'+kind).then(r=>{$('#err').textContent=r.msg||''}).finally(()=>{b.textContent=was;b.disabled=false})});
   const r3=h('div','row');r3.append(go('⚡ Разминка','warmup'),go('🎯 Тест','quiz'),go('🔁 Глаголы','verbs'));app.append(r3);
   app.append(h('p','h','Пришли английское слово — покажу карточку и добавлю в повторение.'));app.lastChild.style.marginTop='10px';
 }

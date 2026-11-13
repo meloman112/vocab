@@ -1,7 +1,7 @@
 <div id="app"></div>
 <script>
 const cards=JSON.parse(TW.chatData).c,app=$('#app');
-let i=+(localStorage.getItem('i')||0),good=+(localStorage.getItem('g')||0);
+let i=+(localStorage.getItem('i')||0),good=+(localStorage.getItem('g')||0),busy=null;
 function save(){localStorage.setItem('i',i);localStorage.setItem('g',good)}
 function draw(){
   app.textContent='';
@@ -13,8 +13,10 @@ function draw(){
   row.append(btn('Показать перевод','p',()=>{
     row.remove();const tr=h('p',null,t);tr.style.cssText='font-size:18px;font-weight:600;margin-top:8px';app.append(tr);
     const r=h('div','row');app.append(r);
-    const rate=n=>()=>{r.querySelectorAll('button').forEach(b=>b.disabled=true);
-      ask('r:'+id+':'+n).then(()=>{if(n==3)good++;i++;save();buzz(n==3?'success':'warning');draw()},()=>r.querySelectorAll('button').forEach(b=>b.disabled=false))};
+    // Следующая карточка — сразу, оценка уходит фоном. Пока она в пути, второй
+    // запрос Telegram не примет (BUSY), но до кнопок следующей ещё «Показать перевод».
+    const rate=n=>()=>{if(busy)return;busy=ask('r:'+id+':'+n).finally(()=>busy=null);
+      if(n==3)good++;i++;save();buzz(n==3?'success':'warning');draw()};
     r.append(btn('Не помню','no',rate(1)),btn('Помню','ok',rate(3)));
   }));
 }

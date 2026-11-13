@@ -1,5 +1,6 @@
 """Хендлеры бота. Логики нет: всё через API, бот — просто ещё один клиент."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -220,13 +221,17 @@ async def add_word(message: Message, api: VocabAPI, widgets: Widgets) -> None:
     Ограничение по длине здесь, а не только в API: иначе на случайно
     вставленный абзац пользователь получил бы 422 без объяснения.
     """
-    await widgets.clean(message.chat.id, "card")
+    old = widgets.take(message.chat.id, "card")
     widgets.track(message.chat.id, "card", message.message_id)
     text = message.text.strip()
     if len(text) > MAX_TEXT_LEN:
-        await message.answer("Слишком длинно. Пришли слово, фразу или одно предложение.")
+        await widgets.delete(message.chat.id, old)
+        sent = await message.answer("Слишком длинно. Пришли слово, фразу или одно предложение.")
+        widgets.track(message.chat.id, "card", sent.message_id)
         return
-    await add_and_reply(message, message.from_user.id, api, widgets, text)
+    # Старое удаляется, пока ИИ разбирает новое слово, а не до этого.
+    await asyncio.gather(widgets.delete(message.chat.id, old),
+                         add_and_reply(message, message.from_user.id, api, widgets, text))
 
 
 @router.callback_query(F.data.startswith("sense:"))

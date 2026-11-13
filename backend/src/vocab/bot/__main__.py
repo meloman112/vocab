@@ -37,8 +37,10 @@ async def main() -> None:
     logging.basicConfig(
         level=cfg.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
+    # httpx пишет каждый запрос с URL, а в URL Bot API — токен бота.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    bot = Bot(cfg.bot_token, default=DefaultBotProperties(parse_mode=None))
+    bot = Bot(cfg.bot_token, session=widget.WarmSession(), default=DefaultBotProperties(parse_mode=None))
     api = VocabAPI(cfg)
     widgets = widget.Widgets(cfg.bot_token)
 
