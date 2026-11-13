@@ -1,0 +1,14 @@
+<div id="app"></div>
+<script>
+const d=JSON.parse(TW.chatData),app=$('#app');
+app.append(h('div','big',d.w));
+app.append(h('p','h',[d.i&&'/'+d.i+'/',d.p,d.x&&'неправильное'].filter(Boolean).join(' · ')));
+if(d.n)app.append(h('p','h','🔤 '+d.n));
+if(d.f)app.append(h('p',null,d.f));
+const t=h('p',null,d.t);t.style.cssText='font-size:18px;font-weight:600;margin-top:6px';app.append(t);
+d.e.forEach(([en,ru])=>{const b=h('div','box'),r=h('p','h','👆 перевод');b.append(h('p',null,en),r);
+b.onclick=()=>{r.textContent=ru;TW.HapticFeedback&&TW.HapticFeedback.selectionChanged()};app.append(b)});
+app.append(h('p','h','⭐ '+d.r+' · учат: '+d.l+(d.c?' · ✅ добавлено':' · уже было у тебя')));
+app.lastChild.style.marginTop='8px';
+TW.ready();
+</script>

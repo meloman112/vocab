@@ -10,6 +10,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from ..client import VocabAPI
 from ..config import settings
+from . import widget
+from .chat import HANDLERS
 from .handlers import router
 from .reminders import start_scheduler
 from .teachers import router as teachers_router
@@ -21,8 +23,10 @@ log = logging.getLogger(__name__)
 COMMANDS = [
     BotCommand(command="grammar", description="📒 Тетрадь по грамматике"),
     BotCommand(command="review", description="🧠 Повторение слов и тесты"),
-    BotCommand(command="quiz", description="Тест по словам в чате"),
-    BotCommand(command="stats", description="Мои цифры и серия"),
+    BotCommand(command="stats", description="📊 Табло: цифры и кнопки"),
+    BotCommand(command="warmup", description="⚡ Разминка: 5 слов в чате"),
+    BotCommand(command="quiz", description="🎯 Тест по словам в чате"),
+    BotCommand(command="verbs", description="🔁 Неправильные глаголы на скорость"),
     BotCommand(command="rating", description="Рейтинг недели"),
     BotCommand(command="top", description="Что учат чаще всего"),
 ]
@@ -36,8 +40,10 @@ async def main() -> None:
 
     bot = Bot(cfg.bot_token, default=DefaultBotProperties(parse_mode=None))
     api = VocabAPI(cfg)
+    widgets = widget.Widgets(cfg.bot_token)
 
     dispatcher = Dispatcher()
+    dispatcher.update.outer_middleware(widget.middleware(HANDLERS))
     # Тетрадь и учителя — раньше слов: основной роутер ловит любой текст.
     dispatcher.include_router(teachers_router)
     dispatcher.include_router(router)
@@ -55,12 +61,17 @@ async def main() -> None:
             )
         )
         await bot.set_my_commands(COMMANDS)
-        scheduler = start_scheduler(bot, api, cfg)
-        await dispatcher.start_polling(bot, api=api, cfg=cfg)
+        scheduler = start_scheduler(bot, api, cfg, widgets)
+        # widget_query aiogram сам не запросит: он его не знает.
+        await dispatcher.start_polling(
+            bot, api=api, cfg=cfg, widgets=widgets,
+            allowed_updates=[*dispatcher.resolve_used_update_types(), "widget_query"],
+        )
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
         await api.close()
+        await widgets.close()
         await bot.session.close()
 
 

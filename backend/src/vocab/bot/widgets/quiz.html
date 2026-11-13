@@ -1,0 +1,33 @@
+<div id="app"><p class="h">Загружаю тест…</p></div>
+<script>
+const app=$('#app');let q;
+function next(r){setTimeout(()=>show(r),700)}
+function show(r){
+  q=r;app.textContent='';
+  if(q.end===null){app.append(h('p',null,'Тест устарел — набери /quiz заново.'));return}
+  if(q.end){app.append(h('div','big','Готово: '+q.end[0]+' из '+q.end[1]),h('p','h','/quiz — ещё раз'));buzz('success');return}
+  app.append(h('p','h','🎯 '+q.n[0]+' из '+q.n[1]+(q.k=='s'?' · собери слово':' · как переводится?')),h('div','big',q.q));
+  q.k=='c'?choice():spell();
+}
+function send(rating){return ask('a:'+q.id+':'+rating).then(next)}
+function choice(){
+  const col=h('div','col');app.append(col);
+  q.o.forEach((o,j)=>col.append(btn(o,null,e=>{
+    col.querySelectorAll('button').forEach(b=>b.disabled=true);
+    const ok=j==q.a;e.target.classList.add(ok?'ok':'no');col.children[q.a].classList.add('ok');buzz(ok?'success':'error');
+    send(ok?2:1)})))
+}
+function spell(){
+  const word=q.a,slots=h('div','big');slots.style.letterSpacing='4px';app.append(slots);
+  let at=0,miss=0;
+  const paint=()=>slots.textContent=[...word].map((c,k)=>k<at?c:c==' '?' ':'_').join('');paint();
+  const tiles=h('div','row');tiles.style.flexWrap='wrap';app.append(tiles);
+  const done=rating=>{tiles.querySelectorAll('button').forEach(b=>b.disabled=true);at=word.length;paint();send(rating)};
+  shuffle([...word.replace(/ /g,'␣')]).forEach(c=>{const b=btn(c,null,()=>{
+    if((c=='␣'?' ':c)!=word[at]){miss++;b.classList.add('no');setTimeout(()=>b.classList.remove('no'),300);buzz('error');if(miss>=3)done(1);return}
+    b.style.visibility='hidden';at++;paint();if(at==word.length){buzz('success');done(miss?2:3)}});
+    b.style.cssText='flex:0 0 40px;padding:10px 0';tiles.append(b)});
+  app.append(btn('Не знаю',null,()=>done(1)));app.lastChild.style.marginTop='10px';
+}
+ask('q').then(show);TW.ready();
+</script>

@@ -478,6 +478,44 @@ async def reminder_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Re
     )
 
 
+async def warmup_targets(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+    """У кого есть слова, которые пора повторить, — им разминка в чате."""
+    return await conn.fetch(
+        """
+        select u.tg_id, count(*) as due
+        from users u
+        join cards c on c.user_id = u.id
+        join words w on w.id = c.word_id
+        where c.due <= now() and not w.banned and c.known_at is null
+        group by u.id
+        """
+    )
+
+
+async def frequent_verbs(conn: asyncpg.Connection, limit: int) -> list[asyncpg.Record]:
+    """Случайные из 80 самых частых неправильных глаголов: go и take, а не forsake."""
+    return await conn.fetch(
+        f"""
+        select word, forms from (
+          select w.lemma as word, w.forms from words w
+          where not w.banned and {IRREGULAR_VERB}
+          order by w.zipf desc limit 80
+        ) top order by random() limit $1
+        """,
+        limit,
+    )
+
+
+async def verbs_best(conn: asyncpg.Connection, user_id: int, score: int | None = None) -> int:
+    """Рекорд игры; со score — сначала обновить, если побит."""
+    if score is None:
+        return await conn.fetchval("select verbs_best from users where id = $1", user_id)
+    return await conn.fetchval(
+        "update users set verbs_best = greatest(verbs_best, $2) where id = $1 returning verbs_best",
+        user_id, score,
+    )
+
+
 async def search(
     conn: asyncpg.Connection, user_id: int, query: str, limit: int
 ) -> list[asyncpg.Record]:

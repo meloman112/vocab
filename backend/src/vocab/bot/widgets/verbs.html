@@ -1,0 +1,26 @@
+<div id="app"></div>
+<script>
+const d=JSON.parse(TW.chatData),app=$('#app'),V=d.v;let best=d.b,score,left,timer,k;
+function start(){
+  app.textContent='';app.append(h('div','big','⚡ Глаголы'),h('p','h','60 секунд: выбирай V2 и V3. Рекорд: '+best));
+  app.append(btn('Старт','p',play));app.lastChild.style.marginTop='10px';
+}
+function play(){score=0;left=60;k=0;shuffle(V);timer=setInterval(tick,1000);round(0)}
+function tick(){left--;const t=$('#t');if(t)t.textContent='⏱ '+left+' · счёт '+score;if(left<=0)end()}
+function end(){clearInterval(timer);app.textContent='';
+  app.append(h('div','big','Счёт: '+score),h('p','h',score>best?'Новый рекорд! 🏆':'Рекорд: '+best));
+  ask('v:'+score).then(r=>{best=r.b});buzz('success');
+  app.append(btn('Ещё раз','p',play));app.lastChild.style.marginTop='10px';
+}
+function round(form){
+  const v=V[k%V.length];app.textContent='';
+  app.append(h('p','h','⏱ '+left+' · счёт '+score),h('div','big',v[0]+' → '+(form?v[1]+' → ?':'?')));app.firstChild.id='t';
+  const right=v[form+1],wrong=[v[2-form],v[0].replace(/e$/,'')+'ed',V[(k+1)%V.length][form+1],v[0]].filter(x=>x!=right);
+  const col=h('div','col');app.append(col);
+  shuffle([right,...[...new Set(wrong)].slice(0,3)]).forEach(o=>col.append(btn(o,null,e=>{
+    if(left<=0)return;const ok=o==right;e.target.classList.add(ok?'ok':'no');buzz(ok?'success':'error');
+    if(ok)score++;col.querySelectorAll('button').forEach(b=>b.disabled=true);
+    setTimeout(()=>{if(left<=0)return;if(form)k++;round(form?0:1)},ok?250:700)})));
+}
+start();TW.ready();
+</script>

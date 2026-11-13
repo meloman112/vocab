@@ -16,7 +16,7 @@ class AddWord(BaseModel):
     as_is: bool = False
 
 
-ReviewMode = Literal["card", "en-ru", "ru-en", "pairs", "listen", "spell", "cloze", "irregular", "poll"]
+ReviewMode = Literal["card", "en-ru", "ru-en", "pairs", "listen", "spell", "cloze", "irregular", "warmup", "chat-quiz"]
 
 
 class Review(BaseModel):
@@ -162,6 +162,8 @@ class StatsOut(BaseModel):
     streak: int
     best_streak: int
     decks: list[DeckProgress]
+    # Сколько новых слов ещё можно взять сегодня.
+    new_left: int
 
 
 class LeaderRow(BaseModel):
@@ -183,6 +185,29 @@ class ReminderTarget(BaseModel):
     # Дней с последнего повторения; None — не повторял ни разу.
     gap: int | None
     due: int
+
+
+class WarmupTarget(BaseModel):
+    tg_id: int
+    due: int
+
+
+class Verb(BaseModel):
+    word: str
+    forms: str
+
+
+class VerbsOut(BaseModel):
+    verbs: list[Verb]
+    best: int
+
+
+class VerbsScore(BaseModel):
+    score: int = Field(ge=0, le=1000)
+
+
+class Best(BaseModel):
+    best: int
 
 
 class Ban(BaseModel):

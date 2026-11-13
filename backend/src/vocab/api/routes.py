@@ -21,6 +21,8 @@ DISCOVER_LIMIT = 10
 # «не помню» назавтра. 15 — потолок, при котором слова ещё держатся.
 NEW_PER_DAY = 15
 LEADERBOARD_SIZE = 10
+# Глаголов в одной игре: хватает на минуту и влезает в 1 КБ данных виджета.
+VERBS_GAME = 12
 # Неправильных вариантов с запасом: часть отсеется как синонимы и та же лемма.
 DISTRACTOR_POOL = 200
 # Пример с формой слова находится не у каждой карточки — берём с запасом.
@@ -296,11 +298,13 @@ async def get_stats(
         days = await repo.forecast(conn, user_id, tz, FORECAST_DAYS)
         streak = await repo.streak(conn, user_id, tz)
         decks = await repo.deck_progress(conn, user_id)
+        new = await repo.new_today(conn, user_id, tz)
 
     return schemas.StatsOut(
         **dict(row),
         **dict(streak),
         decks=[schemas.DeckProgress(**dict(d)) for d in decks],
+        new_left=max(0, NEW_PER_DAY - new),
         forecast=[schemas.ForecastDay(day=d["day"], count=d["count"]) for d in days],
     )
 
@@ -365,6 +369,35 @@ async def internal_reminders(request: Request) -> list[schemas.ReminderTarget]:
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.reminder_targets(conn, settings().tz)
     return [schemas.ReminderTarget(**dict(r)) for r in rows]
+
+
+@router.get(
+    "/internal/warmup",
+    response_model=list[schemas.WarmupTarget],
+    dependencies=[Depends(service_only)],
+)
+async def internal_warmup(request: Request) -> list[schemas.WarmupTarget]:
+    """Кому слать разминку в чат: у кого есть слова к повторению."""
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.warmup_targets(conn)
+    return [schemas.WarmupTarget(**dict(r)) for r in rows]
+
+
+@router.get("/games/verbs", response_model=schemas.VerbsOut)
+async def get_verbs(request: Request, user_id: int = Depends(current_user)) -> schemas.VerbsOut:
+    """Глаголы для игры на скорость в чате и рекорд игрока."""
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.frequent_verbs(conn, VERBS_GAME)
+        best = await repo.verbs_best(conn, user_id)
+    return schemas.VerbsOut(verbs=[schemas.Verb(**dict(r)) for r in rows], best=best)
+
+
+@router.post("/games/verbs", response_model=schemas.Best)
+async def post_verbs(
+    body: schemas.VerbsScore, request: Request, user_id: int = Depends(current_user)
+) -> schemas.Best:
+    async with request.app.state.pool.acquire() as conn:
+        return schemas.Best(best=await repo.verbs_best(conn, user_id, body.score))
 
 
 @router.post(

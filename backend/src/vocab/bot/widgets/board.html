@@ -1,0 +1,17 @@
+<div id="app"><p class="h">Загружаю…</p></div>
+<script>
+const app=$('#app');
+const tile=(n,l)=>{const b=h('div','box');b.style.cssText='flex:1;text-align:center;margin:0';b.append(h('div','big',n),h('p','h',l));return b};
+function draw(s){
+  app.textContent='';app.append(h('p','h','📊 Мои слова'));
+  const r1=h('div','row');r1.append(tile('🔥'+s.s,'серия, рекорд '+s.b),tile(s.d,'ждут повторения'));
+  const r2=h('div','row');r2.append(tile(s.l+'/'+s.t,'выучено'),tile(s.n,'новых сегодня'));
+  app.append(r1,r2);
+  const go=(t,kind)=>btn(t,'p',()=>ask('go:'+kind).then(r=>{$('#err').textContent=r.msg||''}));
+  const r3=h('div','row');r3.append(go('⚡ Разминка','warmup'),go('🎯 Тест','quiz'),go('🔁 Глаголы','verbs'));app.append(r3);
+  app.append(h('p','h','Пришли английское слово — покажу карточку и добавлю в повторение.'));app.lastChild.style.marginTop='10px';
+}
+// Фоновый запрос — не чаще раза в 5 с, а activated приходит и при первом показе.
+let at=0;const load=()=>{if(Date.now()-at<10000)return;at=Date.now();ask('s').then(draw)};
+load();TW.onEvent('activated',load);TW.ready();
+</script>

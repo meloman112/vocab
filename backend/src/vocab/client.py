@@ -76,6 +76,18 @@ class VocabAPI:
     async def leaderboard(self, tg_id: int) -> dict[str, Any]:
         return await self._call("GET", "/leaderboard", tg_id)
 
+    async def queue(self, tg_id: int) -> list[dict[str, Any]]:
+        return (await self._call("GET", "/queue", tg_id))["cards"]
+
+    async def warmup_targets(self) -> list[dict[str, Any]]:
+        return await self._call("GET", "/internal/warmup")
+
+    async def verbs(self, tg_id: int) -> dict[str, Any]:
+        return await self._call("GET", "/games/verbs", tg_id)
+
+    async def verbs_score(self, tg_id: int, score: int) -> int:
+        return (await self._call("POST", "/games/verbs", tg_id, json={"score": score}))["best"]
+
     async def reminder_targets(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/reminders")
 

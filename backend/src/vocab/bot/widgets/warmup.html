@@ -1,0 +1,22 @@
+<div id="app"></div>
+<script>
+const cards=JSON.parse(TW.chatData).c,app=$('#app');
+let i=+(localStorage.getItem('i')||0),good=+(localStorage.getItem('g')||0);
+function save(){localStorage.setItem('i',i);localStorage.setItem('g',good)}
+function draw(){
+  app.textContent='';
+  if(i>=cards.length){app.append(h('div','big','Готово 🎉'),h('p','h','Помню '+good+' из '+cards.length+'. Следующая разминка через пару часов.'));return}
+  const [id,w,t,ex]=cards[i];
+  app.append(h('p','h','⚡ Разминка · '+(i+1)+' из '+cards.length),h('div','big',w));
+  if(ex)app.append(h('p','h',ex));
+  const row=h('div','row');app.append(row);
+  row.append(btn('Показать перевод','p',()=>{
+    row.remove();const tr=h('p',null,t);tr.style.cssText='font-size:18px;font-weight:600;margin-top:8px';app.append(tr);
+    const r=h('div','row');app.append(r);
+    const rate=n=>()=>{r.querySelectorAll('button').forEach(b=>b.disabled=true);
+      ask('r:'+id+':'+n).then(()=>{if(n==3)good++;i++;save();buzz(n==3?'success':'warning');draw()},()=>r.querySelectorAll('button').forEach(b=>b.disabled=false))};
+    r.append(btn('Не помню','no',rate(1)),btn('Помню','ok',rate(3)));
+  }));
+}
+draw();TW.ready();
+</script>

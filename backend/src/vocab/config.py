@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     # напоминаний — UTC здесь дал бы сдвиг на полдня.
     tz: str = "UTC"
     reminder_hours: str = "9,20"
+    # Разминка в чате — между напоминаниями, раз в 2–3 часа.
+    warmup_hours: str = "11,14,17"
 
     log_level: str = "INFO"
     queue_limit: int = Field(default=50, ge=1, le=200)
@@ -59,6 +61,10 @@ class Settings(BaseSettings):
     @property
     def reminder_hour_list(self) -> list[int]:
         return [int(h) for h in self.reminder_hours.split(",") if h.strip()]
+
+    @property
+    def warmup_hour_list(self) -> list[int]:
+        return [int(h) for h in self.warmup_hours.split(",") if h.strip()]
 
 
 @lru_cache

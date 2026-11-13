@@ -11,7 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 
 from ..client import VocabAPI
 from ..config import Settings
+from . import chat
 from .handlers import review_keyboard
+from .widget import Widgets
 from .teachers import test_keyboard
 
 log = logging.getLogger(__name__)
@@ -74,7 +76,16 @@ async def remind_tests(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
             log.warning("не напомнил о тесте %s: %s", target["tg_id"], exc)
 
 
-def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings) -> AsyncIOScheduler:
+async def warmups(widgets: Widgets, api: VocabAPI) -> None:
+    """Разминка всем, у кого есть слова к повторению: прежняя из чата уходит."""
+    for target in await api.warmup_targets():
+        try:
+            await chat.send_warmup(widgets, api, target["tg_id"])
+        except Exception as exc:  # noqa: BLE001 — как в notify: остальным разминка дойти должна
+            log.warning("не отправил разминку %s: %s", target["tg_id"], exc)
+
+
+def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=cfg.tz)
     # Последнее напоминание дня — «вечернее»: в нём спасаем серию.
     evening_hour = max(cfg.reminder_hour_list)
@@ -90,6 +101,9 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings) -> AsyncIOScheduler:
         )
     scheduler.add_job(remind_tests, CronTrigger(hour=evening_hour, minute=5), args=(bot, api, cfg),
                       id="remind-tests", misfire_grace_time=300)
+    for hour in cfg.warmup_hour_list:
+        scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api),
+                          id=f"warmup-{hour}", misfire_grace_time=300)
     scheduler.start()
-    log.info("напоминания в %s (%s)", cfg.reminder_hour_list, cfg.tz)
+    log.info("напоминания в %s, разминки в %s (%s)", cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)
     return scheduler

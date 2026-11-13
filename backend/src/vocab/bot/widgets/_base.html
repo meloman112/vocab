@@ -1,0 +1,28 @@
+<style>
+:root{--tx:#000;--hint:#888;--btn:#2481cc;--btx:#fff;--card:rgba(127,127,127,.14);color-scheme:light dark}
+*{box-sizing:border-box;margin:0}
+body{font:15px/1.35 system-ui,sans-serif;color:var(--tx);padding:12px}
+button{font:inherit;border:0;border-radius:10px;padding:10px 12px;background:var(--card);color:var(--tx)}
+.p{background:var(--btn);color:var(--btx)}
+.h{color:var(--hint);font-size:13px}
+.row{display:flex;gap:8px;margin-top:10px}
+.row>button{flex:1}
+.col{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.big{font-size:26px;font-weight:700}
+.ok{background:#2e9e4f;color:#fff}
+.no{background:#d64040;color:#fff}
+.box{background:var(--card);border-radius:12px;padding:10px;margin-top:8px}
+</style>
+<script>
+const TW=window.TelegramWidget,$=s=>document.querySelector(s);
+function theme(){const t=TW.themeParams||{},r=document.documentElement.style;
+[['--tx','text_color'],['--hint','hint_color'],['--btn','button_color'],['--btx','button_text_color']].forEach(([v,k])=>t[k]&&r.setProperty(v,t[k]))}
+theme();TW.onEvent('themeChanged',theme);
+const h=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
+const btn=(text,cls,fn)=>{const b=h('button',cls,text);b.onclick=fn;return b};
+const buzz=t=>TW.HapticFeedback&&TW.HapticFeedback.notificationOccurred(t);
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const ERR={TIMEOUT:'Бот не ответил, попробуй ещё раз',RATE_LIMITED:'Слишком быстро — секунду',FAILED:'Нет связи с ботом',NOT_ALLOWED:'Это сообщение устарело'};
+function ask(d){return TW.request(d).then(r=>JSON.parse(r.result),e=>{const m=$('#err');if(m)m.textContent=ERR[e.code]||e.message;throw e})}
+</script>
+<p id="err" class="h" style="color:#d64040"></p>
