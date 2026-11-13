@@ -4,6 +4,7 @@ import type {
   AdminWord,
   Card,
   CommonMistake,
+  DrillVerb,
   GrammarAttempt,
   RecheckOut,
   GrammarContent,
@@ -97,6 +98,7 @@ export const api = {
   grammar: {
     content: () => request<GrammarContent>('/grammar/content'),
     progress: () => request<GrammarProgress>('/grammar/progress'),
+    verbs: () => request<DrillVerb[]>('/grammar/verbs'),
     attempt: (attempt: GrammarAttempt) => send<void>('POST', '/grammar/attempts', attempt),
     recheck: (body: { item: string; slot: number; answer: string; key: string[] }) =>
       send<RecheckOut>('POST', '/grammar/recheck', body),

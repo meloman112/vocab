@@ -172,6 +172,11 @@ export interface GrammarResult {
   answers: string[];
 }
 
+export interface DrillVerb {
+  lemma: string;
+  irregular: boolean;
+}
+
 export interface GrammarProgress {
   results: Record<string, GrammarResult>;
   /** Засчитанные учителем ответы: item → номер пропуска → ответы. */

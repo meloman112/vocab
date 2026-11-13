@@ -20,6 +20,7 @@ router = APIRouter()
 # Ссылка учителя живёт неделю: передают её не сразу, но вечной ей быть незачем.
 INVITE_TTL_DAYS = 7
 COMMON_MISTAKES = 30
+DRILL_VERBS = 40
 
 
 def _known(item: str) -> grammar.Item:
@@ -60,6 +61,15 @@ async def get_progress(
         },
         accepted=accepted,
     )
+
+
+@router.get("/grammar/verbs", response_model=list[schemas.DrillVerb])
+async def get_drill_verbs(
+    request: Request, user_id: int = Depends(current_user)
+) -> list[schemas.DrillVerb]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.drill_verbs(conn, user_id, DRILL_VERBS)
+    return [schemas.DrillVerb(**dict(r)) for r in rows]
 
 
 @router.post("/grammar/attempts", status_code=status.HTTP_204_NO_CONTENT)

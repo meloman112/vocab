@@ -361,6 +361,11 @@ class GrammarResult(BaseModel):
     answers: list[str]
 
 
+class DrillVerb(BaseModel):
+    lemma: str
+    irregular: bool
+
+
 class GrammarProgress(BaseModel):
     results: dict[str, GrammarResult]
     # item → номер пропуска → ответы, которые засчитал учитель.

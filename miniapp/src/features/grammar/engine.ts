@@ -103,7 +103,7 @@ const IRREGULAR: Record<string, [string, string]> = {
   throw: ['threw', 'thrown'], understand: ['understood', 'understood'], wake: ['woke', 'woken'],
   wear: ['wore', 'worn'], win: ['won', 'won'], withdraw: ['withdrew', 'withdrawn'], write: ['wrote', 'written'],
 };
-const STATE_VERBS = new Set(['know', 'believe', 'understand', 'remember', 'forget', 'mean', 'like',
+export const STATE_VERBS = new Set(['know', 'believe', 'understand', 'remember', 'forget', 'mean', 'like',
   'love', 'dislike', 'hate', 'prefer', 'want', 'need', 'own', 'belong', 'be', 'seem', 'cost', 'contain']);
 
 interface TenseInfo {
@@ -178,6 +178,8 @@ export function edForm(v: string): string {
 
 const v2 = (v: string): string[] => (IRREGULAR[v] ? variants(IRREGULAR[v][0]) : [edForm(v)]);
 const v3 = (v: string): string[] => (IRREGULAR[v] ? variants(IRREGULAR[v][1]) : [edForm(v)]);
+/** Движок знает формы глагола: правильный строится правилом, неправильный — из таблицы. */
+export const canInflect = (v: string, irregular: boolean) => !irregular || v in IRREGULAR;
 export const pastForm = (v: string) => v2(v)[0]!;
 export const participle = (v: string) => v3(v)[0]!;
 

@@ -492,6 +492,22 @@ async def warmup_targets(conn: asyncpg.Connection) -> list[asyncpg.Record]:
     )
 
 
+async def drill_verbs(conn: asyncpg.Connection, user_id: int, limit: int) -> list[asyncpg.Record]:
+    """Глаголы для тренировки форм: сначала те, что ученик учит, свежие первыми,
+    потом самые частые в языке — чтобы тренировка была и у новичка без карточек.
+    Фразовые («go on») не берём: движок строит формы одного слова."""
+    return await conn.fetch(
+        """
+        select w.lemma, w.irregular from words w
+        left join cards c on c.word_id = w.id and c.user_id = $1
+        where w.pos = 'verb' and not w.banned and w.lemma !~ '[^a-z]'
+        order by c.id is null, c.last_review desc nulls last, w.zipf desc
+        limit $2
+        """,
+        user_id, limit,
+    )
+
+
 async def frequent_verbs(conn: asyncpg.Connection, limit: int) -> list[asyncpg.Record]:
     """Случайные из 80 самых частых неправильных глаголов: go и take, а не forsake."""
     return await conn.fetch(
