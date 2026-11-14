@@ -101,11 +101,13 @@ async def add_and_reply(
         widgets.track(message.chat.id, "card", sent.message_id)
         return
     for entry in entries:
-        await widgets.send(message.chat.id, "card", chat.card_data(entry), keyboard=entry_keyboard(entry))
+        keyboard = entry_keyboard(entry)
+        await widgets.send(message.chat.id, "card", chat.card_data(entry), keyboard=keyboard,
+                           fallback=(chat.card_text(entry), keyboard))
 
 
 @router.message(Command("start"))
-async def start(message: Message, cfg: Settings, widgets: Widgets) -> None:
+async def start(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
     await message.answer(
         "Привет! Здесь два раздела.\n\n"
         "📒 Тетрадь — 134 упражнения по грамматике из Work book: времена, Passive, "
@@ -120,7 +122,7 @@ async def start(message: Message, cfg: Settings, widgets: Widgets) -> None:
         "/grammar — тетрадь\n/review — повторение в приложении\n"
         "/top — что учат чаще всего\n/rating — рейтинг недели",
     )
-    await chat.send_board(widgets, cfg, message.chat.id)
+    await chat.send_board(widgets, api, cfg, message.chat.id)
 
 
 @router.message(Command("review"))
@@ -129,10 +131,10 @@ async def review(message: Message, cfg: Settings) -> None:
 
 
 @router.message(Command("stats"))
-async def stats(message: Message, cfg: Settings, widgets: Widgets) -> None:
+async def stats(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
     """Табло: цифры и кнопки разминки, теста и игры."""
     await message.delete()
-    await chat.send_board(widgets, cfg, message.chat.id)
+    await chat.send_board(widgets, api, cfg, message.chat.id)
 
 
 @router.message(Command("top"))
@@ -189,26 +191,26 @@ async def ban(message: Message, command: CommandObject, api: VocabAPI, cfg: Sett
     await message.answer(f"«{command.args}» убрано из словаря")
 
 
-async def open_widget(message: Message, api: VocabAPI, widgets: Widgets, kind: str) -> None:
+async def open_widget(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets, kind: str) -> None:
     """Команда виджета: сама команда из чата убирается, виджет — вместо прежнего."""
     await message.delete()
-    if not await chat.OPENERS[kind](widgets, api, message.chat.id):
+    if not await chat.OPENERS[kind](widgets, api, cfg, message.chat.id):
         await message.answer(chat.EMPTY[kind])
 
 
 @router.message(Command("quiz"))
-async def quiz(message: Message, api: VocabAPI, widgets: Widgets) -> None:
-    await open_widget(message, api, widgets, "quiz")
+async def quiz(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
+    await open_widget(message, api, cfg, widgets, "quiz")
 
 
 @router.message(Command("verbs"))
-async def verbs(message: Message, api: VocabAPI, widgets: Widgets) -> None:
-    await open_widget(message, api, widgets, "verbs")
+async def verbs(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
+    await open_widget(message, api, cfg, widgets, "verbs")
 
 
 @router.message(Command("warmup"))
-async def warmup(message: Message, api: VocabAPI, widgets: Widgets) -> None:
-    await open_widget(message, api, widgets, "warmup")
+async def warmup(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
+    await open_widget(message, api, cfg, widgets, "warmup")
 
 
 @router.message(F.text)

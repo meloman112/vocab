@@ -16,7 +16,7 @@ class AddWord(BaseModel):
     as_is: bool = False
 
 
-ReviewMode = Literal["card", "en-ru", "ru-en", "pairs", "listen", "spell", "cloze", "irregular", "warmup", "chat-quiz"]
+ReviewMode = Literal["card", "en-ru", "ru-en", "pairs", "listen", "spell", "cloze", "irregular", "warmup", "chat-quiz", "learn"]
 
 
 class Review(BaseModel):

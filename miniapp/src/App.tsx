@@ -5,7 +5,7 @@ import { AdminScreen } from './features/admin/AdminScreen';
 import { GrammarScreen } from './features/grammar/GrammarScreen';
 import { HomeScreen } from './features/home/HomeScreen';
 import { LeaderboardScreen } from './features/leaderboard/LeaderboardScreen';
-import { modeById, type ModeId } from './features/quiz/modes';
+import { MODES, modeById, type ModeId } from './features/quiz/modes';
 import { QuizFlow } from './features/quiz/QuizFlow';
 import { CardsFlow } from './features/review/CardsFlow';
 import { TeacherScreen } from './features/teacher/TeacherScreen';
@@ -27,6 +27,8 @@ type Screen =
 function initialScreen(): Screen {
   if (startScreen === 'grammar' || startScreen === 'teacher' || startScreen === 'cards') return { name: startScreen };
   if (startScreen === 'tests' || startScreen === 'test') return { name: 'tests', id: startTestId };
+  const mode = MODES.find((m) => m.id === startScreen);
+  if (mode) return { name: 'quiz', mode: mode.id };
   return { name: 'home' };
 }
 

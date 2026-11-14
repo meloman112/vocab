@@ -114,7 +114,7 @@ export interface QuizCard extends Card {
 }
 
 /** Откуда сервер берёт карточки теста. */
-export type QuizSource = 'any' | 'irregular' | 'cloze';
+export type QuizSource = 'any' | 'irregular' | 'cloze' | 'learn';
 
 export type ReportReason = 'typo' | 'translation' | 'example' | 'other';
 

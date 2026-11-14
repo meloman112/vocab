@@ -51,3 +51,35 @@ def test_long_word_is_not_spelled():
 
 def test_first_forms_take_first_variant():
     assert first_forms("get · got · got/gotten") == ["get", "got", "got"]
+
+
+def test_refused_widget_goes_as_text_and_widgets_rest_for_an_hour():
+    import asyncio
+
+    from vocab.bot.widget import TelegramError, Widgets
+
+    calls = []
+
+    async def call(method, **params):
+        calls.append(method)
+        if method == "sendWidget":
+            raise TelegramError("sendWidget: Bad Request: INPUT_MEDIA_WIDGET_NOT_ALLOWED")
+        return {"message_id": len(calls)}
+
+    widgets = Widgets("token")
+    widgets.call = call
+    asyncio.run(widgets.send(1, "card", fallback=("book — книга", None)))
+    asyncio.run(widgets.send(1, "card", fallback=("book — книга", None)))
+    assert calls == ["sendWidget", "sendMessage", "sendMessage"]
+    assert widgets.messages[1]["card"] == [2, 3]
+
+
+def test_card_text_has_word_translation_and_example():
+    from vocab.bot.chat import card_text
+
+    entry = {"lemma": "go", "ipa": "ɡəʊ", "pos": "verb", "irregular": True, "forms": "go · went · gone",
+             "form_note": "went → go", "translation": "идти", "top": "топ-100", "learners": 3,
+             "created": True, "examples": [{"en": "I go home.", "ru": "Я иду домой."}]}
+    text = card_text(entry)
+    assert text.startswith("go\n/ɡəʊ/ · verb · неправильное")
+    assert "👉 идти" in text and "• I go home." in text and "✅ добавлено" in text

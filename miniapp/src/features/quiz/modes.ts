@@ -1,7 +1,7 @@
 import type { QuizCard, QuizSource } from '../../api/types';
 import { canSpeak } from '../../lib/speech';
 
-export type ModeId = 'en-ru' | 'ru-en' | 'spell' | 'cloze' | 'irregular' | 'listen' | 'pairs';
+export type ModeId = 'learn' | 'en-ru' | 'ru-en' | 'spell' | 'cloze' | 'irregular' | 'listen' | 'pairs';
 
 export interface Mode {
   id: ModeId;
@@ -20,6 +20,8 @@ const always = () => true;
 
 /** Порядок — от узнавания к воспроизведению: так меню читается как лестница. */
 export const MODES: Mode[] = [
+  { id: 'learn', icon: '🎓', title: 'Тренировка', subtitle: 'Каждое слово в разные стороны, пока не запомнишь',
+    source: 'learn', recall: true, fits: hasRu },
   { id: 'en-ru', icon: '🔤', title: 'Выбери перевод', subtitle: 'Слово → один из 4 переводов',
     source: 'any', recall: false, fits: hasRu },
   { id: 'ru-en', icon: '🔁', title: 'Выбери слово', subtitle: 'Перевод → одно из 4 слов',

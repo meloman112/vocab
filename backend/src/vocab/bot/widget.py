@@ -10,6 +10,7 @@ HTML отправленного виджета не меняется, меняю
 import asyncio
 import json
 import logging
+import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from functools import cache
@@ -29,7 +30,14 @@ KEEPALIVE = 600
 # Лимиты Bot API: данные сообщения и ответ на запрос — до 1 КБ.
 MAX_DATA = 1024
 
+NOT_ALLOWED = "INPUT_MEDIA_WIDGET_NOT_ALLOWED"
+# После отказа виджеты не пробуем час: иначе каждый ответ ждал бы лишний
+# запрос, а вернёт ли их Telegram — узнаем при следующей попытке.
+WIDGETS_RETRY = 3600
+
 Query = dict[str, Any]
+# Текст и кнопки обычного сообщения вместо виджета.
+Fallback = tuple[str, InlineKeyboardMarkup | None]
 Handler = Callable[[Query, dict[str, Any]], Awaitable[Any]]
 
 
@@ -64,6 +72,7 @@ class Widgets:
         # новое того же вида: в чате остаётся одна разминка, один тест, одна
         # карточка. Память процесса: после перезапуска старые просто останутся.
         self.messages: dict[int, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
+        self.widgets_retry_at = 0.0
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -85,14 +94,32 @@ class Widgets:
         return message_id
 
     async def send(
-        self, chat_id: int, name: str, data: Any = None, *, queries: bool = False,
-        keyboard: InlineKeyboardMarkup | None = None,
+        self, chat_id: int, name: str, data: Any = None, *, fallback: Fallback,
+        queries: bool = False, keyboard: InlineKeyboardMarkup | None = None,
     ) -> int:
-        """Шлёт виджет name и запоминает его для чистки. Возвращает message_id."""
+        """Шлёт виджет name и запоминает его для чистки. Возвращает message_id.
+
+        Виджеты Telegram может запретить боту в любой момент (так было
+        13.11.2026), поэтому у каждого есть fallback — обычное сообщение.
+        """
+        if time.monotonic() >= self.widgets_retry_at:
+            try:
+                message = await self.call(
+                    "sendWidget", chat_id=chat_id, html=template(name),
+                    chat_data=None if data is None else pack(data), allow_queries=queries or None,
+                    reply_markup=keyboard.model_dump(exclude_none=True) if keyboard else None,
+                )
+                self.track(chat_id, name, message["message_id"])
+                return message["message_id"]
+            except TelegramError as exc:
+                if NOT_ALLOWED not in str(exc):
+                    raise
+                log.warning("виджеты запрещены, шлю текстом %s мин: %s", WIDGETS_RETRY // 60, exc)
+                self.widgets_retry_at = time.monotonic() + WIDGETS_RETRY
+        text, markup = fallback
         message = await self.call(
-            "sendWidget", chat_id=chat_id, html=template(name),
-            chat_data=None if data is None else pack(data), allow_queries=queries or None,
-            reply_markup=keyboard.model_dump(exclude_none=True) if keyboard else None,
+            "sendMessage", chat_id=chat_id, text=text, link_preview_options={"is_disabled": True},
+            reply_markup=markup.model_dump(exclude_none=True) if markup else None,
         )
         self.track(chat_id, name, message["message_id"])
         return message["message_id"]

@@ -15,18 +15,28 @@ interface Props {
   caption?: ReactNode;
   accepted: Answers;
   near?: string[];
+  /** Первая ошибка — подсказка и ещё попытка (тренировка). */
+  secondChance?: boolean;
   onDone: (results: Result[]) => void;
 }
 
-export function Typing({ card, question, caption, accepted, near, onDone }: Props) {
+export function Typing({ card, question, caption, accepted, near, secondChance = false, onDone }: Props) {
   const [value, setValue] = useState('');
   const [hinted, setHinted] = useState(false);
+  const [missed, setMissed] = useState(false);
   const [result, setResult] = useState<Grade | null>(null);
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     if (result || !value.trim()) return;
     const graded = grade(value, accepted, near);
+    if (graded.rating === WRONG && secondChance && !missed) {
+      notify('warning');
+      setMissed(true);
+      setHinted(true);
+      setValue('');
+      return;
+    }
     // С подсказкой верный ответ — уже не чистое воспоминание.
     const rating: Rating = hinted ? (Math.min(graded.rating, ALMOST) as Rating) : graded.rating;
     notify(rating === RIGHT ? 'success' : rating === WRONG ? 'error' : 'warning');
@@ -46,6 +56,7 @@ export function Typing({ card, question, caption, accepted, near, onDone }: Prop
           {question}
         </LargeTitle>
         {caption && <Caption className="hint">{caption}</Caption>}
+        {missed && !result && <Text>Не-а 😑 Подсказка:</Text>}
         {hinted && <Text className="mono">{hint(accepted[0])}</Text>}
       </div>
 

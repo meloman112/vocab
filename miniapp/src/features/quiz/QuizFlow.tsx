@@ -9,7 +9,8 @@ import { FormChoice } from './exercises/FormChoice';
 import { Forms } from './exercises/Forms';
 import { Pairs } from './exercises/Pairs';
 import { Typing } from './exercises/Typing';
-import { type Mode } from './modes';
+import { useLearnSession } from './useLearnSession';
+import { type Mode, modeById } from './modes';
 import { type Result, useQuizSession } from './useQuizSession';
 
 interface Props {
@@ -23,12 +24,25 @@ const REVIEW = 2;
 
 const EMPTY: Partial<Record<Mode['id'], string>> = {
   irregular: 'В твоих словах пока нет неправильных глаголов. Возьми их набором «Неправильные глаголы» на главной.',
+  learn: 'Слов пока нет. Возьми новые на главной или пришли боту английское слово.',
   cloze: 'Ни в одном примере твоих слов не нашлось формы слова. Попробуй другой тест.',
 };
 
-export function QuizFlow({ mode, onCards, onLeaderboard }: Props) {
-  const session = useQuizSession(mode);
+type Session = ReturnType<typeof useQuizSession> | ReturnType<typeof useLearnSession>;
 
+export function QuizFlow(props: Props) {
+  return props.mode.id === 'learn' ? <LearnFlow {...props} /> : <TestFlow {...props} />;
+}
+
+function TestFlow(props: Props) {
+  return <Flow {...props} session={useQuizSession(props.mode)} />;
+}
+
+function LearnFlow(props: Props) {
+  return <Flow {...props} session={useLearnSession()} />;
+}
+
+function Flow({ mode, onCards, onLeaderboard, session }: Props & { session: Session }) {
   switch (session.phase) {
     case 'loading':
       return (
@@ -73,14 +87,21 @@ export function QuizFlow({ mode, onCards, onLeaderboard }: Props) {
       return (
         <div className="screen">
           <header className="screen__head">
-            <Progress value={(session.index / session.total) * 100} />
+            <Progress value={session.progress * 100} />
             <Caption className="screen__counter">
-              {mode.icon} {session.index + 1}/{session.total}
+              {mode.icon} {session.counter}
             </Caption>
           </header>
           <main className="quiz">
-            {/* key: новый раунд — новое состояние упражнения, без ручного сброса. */}
-            <Exercise key={session.index} mode={mode} round={session.round} onDone={session.finish} />
+            {/* key: новый раунд — новое состояние упражнения, без ручного сброса.
+                В тренировке упражнение — текущая ступенька слова. */}
+            <Exercise
+              key={session.turn}
+              mode={session.step ? modeById(session.step) : mode}
+              round={session.round}
+              secondChance={session.step !== null}
+              onDone={session.finish}
+            />
           </main>
         </div>
       );
@@ -90,10 +111,12 @@ export function QuizFlow({ mode, onCards, onLeaderboard }: Props) {
 interface ExerciseProps {
   mode: Mode;
   round: QuizCard[];
+  /** Первая ошибка в вводе — подсказка и ещё попытка, а не провал. */
+  secondChance: boolean;
   onDone: (results: Result[]) => void;
 }
 
-function Exercise({ mode, round, onDone }: ExerciseProps) {
+function Exercise({ mode, round, secondChance, onDone }: ExerciseProps) {
   const [card] = round;
   if (!card) return null;
   switch (mode.id) {
@@ -105,6 +128,8 @@ function Exercise({ mode, round, onDone }: ExerciseProps) {
       return <Choice card={card} direction="en-ru" listen onDone={onDone} />;
     case 'pairs':
       return <Pairs round={round} onDone={onDone} />;
+    case 'learn':
+      throw new Error('тренировка — это лесенка из других режимов');
     case 'irregular':
       return card.state === REVIEW ? <Forms card={card} onDone={onDone} /> : <FormChoice card={card} onDone={onDone} />;
     case 'spell':
@@ -114,6 +139,7 @@ function Exercise({ mode, round, onDone }: ExerciseProps) {
           question={card.translation}
           caption={POS_NAMES[card.pos] ?? card.pos}
           accepted={acceptedWords(card)}
+          secondChance={secondChance}
           onDone={onDone}
         />
       );
@@ -127,6 +153,7 @@ function Exercise({ mode, round, onDone }: ExerciseProps) {
           caption={`${card.cloze.ru} · ${card.translation}`}
           accepted={[card.cloze.answer]}
           near={[card.word]}
+          secondChance={secondChance}
           onDone={onDone}
         />
       );

@@ -178,7 +178,7 @@ async def _set_known(request: Request, user_id: int, card_id: int, known: bool) 
 @router.get("/quiz", response_model=schemas.QuizOut)
 async def get_quiz(
     request: Request,
-    mode: Literal["any", "irregular", "cloze"] = "any",
+    mode: Literal["any", "irregular", "cloze", "learn"] = "any",
     limit: int = Query(default=10, ge=1, le=50),
     user_id: int = Depends(current_user),
 ) -> schemas.QuizOut:
@@ -186,7 +186,7 @@ async def get_quiz(
     POST /review: оценку ставит не человек, а проверка ответа."""
     fetch = limit * CLOZE_OVERSAMPLE if mode == "cloze" else limit
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.quiz_cards(conn, user_id, "irregular" if mode == "irregular" else "any", fetch)
+        rows = await repo.quiz_cards(conn, user_id, mode if mode in repo.QUIZ_FILTERS else "any", fetch)
         pool = await repo.distractors(conn, DISTRACTOR_POOL)
     rng = random.Random()
     cards = []

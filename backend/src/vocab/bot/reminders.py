@@ -77,11 +77,11 @@ async def remind_tests(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
             log.warning("не напомнил о тесте %s: %s", target["tg_id"], exc)
 
 
-async def warmups(widgets: Widgets, api: VocabAPI) -> None:
+async def warmups(widgets: Widgets, api: VocabAPI, cfg: Settings) -> None:
     """Разминка всем, у кого есть слова к повторению: прежняя из чата уходит."""
     for target in await api.warmup_targets():
         try:
-            await chat.send_warmup(widgets, api, target["tg_id"])
+            await chat.send_warmup(widgets, api, cfg, target["tg_id"])
         except Exception as exc:  # noqa: BLE001 — как в notify: остальным разминка дойти должна
             log.warning("не отправил разминку %s: %s", target["tg_id"], exc)
 
@@ -111,7 +111,7 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) ->
     scheduler.add_job(remind_tests, CronTrigger(hour=evening_hour, minute=5), args=(bot, api, cfg),
                       id="remind-tests", misfire_grace_time=300)
     for hour in cfg.warmup_hour_list:
-        scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api),
+        scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api, cfg),
                           id=f"warmup-{hour}", misfire_grace_time=300)
     scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()

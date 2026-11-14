@@ -567,6 +567,12 @@ async def weak_cards(
 QUIZ_FILTERS = {
     "any": "c.last_review is not null",
     "irregular": IRREGULAR_VERB,
+    "learn": "true",
+}
+# Тренировка: сначала то, что пора повторить, потом новые (ещё ни разу
+# не повторённые), потом то, что подойдёт раньше всего.
+QUIZ_ORDER = {
+    "learn": "case when c.last_review is null then 1 when c.due <= now() then 0 else 2 end, c.due",
 }
 
 
@@ -574,11 +580,12 @@ async def quiz_cards(
     conn: asyncpg.Connection, user_id: int, mode: str, limit: int
 ) -> list[asyncpg.Record]:
     """Сначала то, что пора повторять, потом то, что подойдёт раньше всего:
-    тест засчитывается как повторение, и раньше срока FSRS это учитывает."""
+    тест засчитывается как повторение, и раньше срока FSRS это учитывает.
+    Тренировка (learn) берёт и новые слова — см. QUIZ_ORDER."""
     return await conn.fetch(
         f"{CARD_SELECT} where c.user_id = $1 and not w.banned and c.known_at is null"
         f" and {QUIZ_FILTERS[mode]}"
-        f" order by c.due limit $2",
+        f" order by {QUIZ_ORDER.get(mode, 'c.due')} limit $2",
         user_id,
         limit,
     )
