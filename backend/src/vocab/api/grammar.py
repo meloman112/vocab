@@ -5,7 +5,6 @@ import secrets
 import time
 from collections import defaultdict
 
-import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -127,18 +126,17 @@ async def import_progress(
 
 
 @router.post("/grammar/pdf", status_code=status.HTTP_204_NO_CONTENT)
-async def send_pdf(body: schemas.PdfRequest, who: Identity = Depends(identity)) -> None:
+async def send_pdf(body: schemas.PdfRequest, request: Request, who: Identity = Depends(identity)) -> None:
     """Файл собирает и шлёт сервер: токен бота в браузер не попадает,
     а кому слать, известно из подписанного initData."""
     exercises = body.model_dump()["exercises"]
     document = await run_in_threadpool(pdf.render, who.name or "", exercises)
     numbers = ", ".join(str(ex["id"]) for ex in exercises)
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(
-            f"https://api.telegram.org/bot{settings().bot_token}/sendDocument",
-            data={"chat_id": who.tg_id, "caption": f"Упражнения {numbers}"},
-            files={"document": (f"workbook-{time.strftime('%Y-%m-%d')}.pdf", document, "application/pdf")},
-        )
+    response = await request.app.state.telegram.post(
+        "/sendDocument",
+        data={"chat_id": who.tg_id, "caption": f"Упражнения {numbers}"},
+        files={"document": (f"workbook-{time.strftime('%Y-%m-%d')}.pdf", document, "application/pdf")},
+    )
     answer = response.json()
     if not answer.get("ok"):
         # Чаще всего ученик не нажал Start: Telegram не даёт боту писать первым.

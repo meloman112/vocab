@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -15,6 +16,7 @@ from ..config import settings
 from ..db import create_pool, migrate
 from ..dictionary import backfill_zipf
 from .. import fill_contrast, grammar
+from ..grammar import pdf
 from ..mcp.server import build_mcp_app
 from .classwork import router as classwork_router
 from .grammar import router as grammar_router
@@ -53,12 +55,20 @@ def create_app() -> FastAPI:
         lexicon.rank(0)
         # Битый content.json должен ронять старт, а не первого ученика.
         log.info("тетрадь: %s заданий", len(grammar.content().items))
+        # Разбор TTF-шрифтов — здесь, а не на первом PDF ученика.
+        pdf.warm()
+        # Одно соединение с Bot API на всё приложение: без него каждый PDF
+        # платил за DNS + TCP + TLS до api.telegram.org.
+        app.state.telegram = httpx.AsyncClient(
+            base_url=f"https://api.telegram.org/bot{cfg.bot_token}", timeout=30
+        )
         filler = fill_contrast.start(app.state.pool, cfg) if cfg.deepseek_api_key else None
         try:
             yield
         finally:
             if filler:
                 filler.cancel()
+            await app.state.telegram.aclose()
             await app.state.pool.close()
 
     app = FastAPI(
