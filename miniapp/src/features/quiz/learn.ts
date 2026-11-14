@@ -2,7 +2,7 @@ import type { QuizCard, Rating } from '../../api/types';
 import { distance, RIGHT, WRONG } from './check';
 
 /** Ступеньки тренировки — режимы теста от узнавания к воспроизведению. */
-export type Step = 'en-ru' | 'ru-en' | 'spell' | 'cloze';
+export type Step = 'en-ru' | 'ru-en' | 'spell' | 'cloze' | 'contrast';
 
 export const LEARN_SIZE = 7;
 /** Через сколько вопросов вернётся слово: после ошибки — скоро, после верного — позже. */
@@ -26,6 +26,8 @@ export function ladder(card: QuizCard): Step[] {
   if (card.choices_en.length >= 2) steps.push('ru-en');
   steps.push('spell');
   if (card.cloze) steps.push('cloze');
+  // Похожие слова — только выученному: на первом знакомстве они мешают запомнить.
+  if (card.state === REVIEW && card.contrast?.quiz) steps.push('contrast');
   return steps;
 }
 
@@ -77,7 +79,8 @@ function putBack(queue: Item[], item: Item, gap: number): Item[] {
 
 /**
  * Ответ на первое слово очереди. Верно с первого раза — прыжок: с выбора сразу
- * на «напиши», с «напиши» — готово. После ошибки — вся лесенка и возврат скорее.
+ * на «напиши», с «напиши» — на «различай» или готово. После ошибки — вся лесенка
+ * и возврат скорее.
  */
 export function answer(queue: Item[], rating: Rating): { queue: Item[]; done: Item | null } {
   const [item, ...rest] = queue;
@@ -85,9 +88,11 @@ export function answer(queue: Item[], rating: Rating): { queue: Item[]; done: It
   const wrong = rating === WRONG;
   // Подсказка или опечатка — уже не «с первого раза».
   const clean = item.clean && rating === RIGHT;
-  const spell = item.steps.indexOf('spell');
   let at = wrong ? Math.max(0, item.at - 1) : item.at + 1;
-  if (clean) at = item.at < spell ? spell : item.steps.length;
+  if (clean) {
+    const jumps = [item.steps.indexOf('spell'), item.steps.indexOf('contrast'), item.steps.length];
+    at = Math.min(...jumps.filter((i) => i > item.at));
+  }
   const next: Item = { ...item, at, clean, rating: Math.min(item.rating, rating) as Rating };
   if (next.at >= next.steps.length) return { queue: rest, done: next };
   return { queue: putBack(rest, next, wrong ? AFTER_WRONG : AFTER_RIGHT), done: null };

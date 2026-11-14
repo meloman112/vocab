@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -89,6 +90,24 @@ RECHECK_PROMPT = """\
 Отвечай только JSON-объектом {"ok": true|false, "why": "..."}, в why —
 одно-два коротких предложения по-русски для ученика.
 """
+CONTRAST_PROMPT = """\
+Ты помогаешь русскоязычному ученику уровня A2-B1 не путать английские слова.
+Тебе пришлют английское слово, часть речи и перевод. Отвечай только JSON-объектом:
+
+others — до 3 разных английских слов, которые с этим словом реально путают
+  русскоязычные: у них тот же перевод на русский, но другое употребление
+  (wear — carry — put on), или похожее написание и звучание (lie — lay).
+  Каждое — {"word": ..., "note": ...}, note — по-русски до 6 слов, когда
+  нужно именно оно («нести в руках, с собой»). Не с чем путать — [].
+note — по-русски до 10 слов: когда нужно именно это слово.
+collocations — 2-3 самых частых сочетания с этим словом по-английски.
+quiz — если others не пуст: {"text": английское предложение до 12 слов, где на
+  месте этого слова стоит ___, а слова из others там были бы явной ошибкой;
+  "ru": перевод предложения; "options": это слово и слова из others в той
+  форме, что нужна в предложении, правильное первым}. Если others пуст — null.
+
+Никаких пояснений и markdown вне JSON.
+"""
 
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 
@@ -96,6 +115,9 @@ LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 # чужим запросом слот добавляет очередь.
 TIMEOUT = httpx.Timeout(120.0)
 ATTEMPTS = 2
+
+
+BLANK = "___"
 
 
 class EnrichError(Exception):
@@ -134,6 +156,44 @@ def parse_word(content: str) -> dict[str, Any]:
     }
 
 
+def parse_contrast(content: str) -> dict[str, Any]:
+    """С чем путают слово. Кривой тест выбрасывается, а не чинится сверх
+    простого: без пропуска или с одним вариантом это не упражнение."""
+    data = json.loads(content)
+    others, seen = [], set()
+    for other in data.get("others") or []:
+        word = str(other.get("word") or "").strip() if isinstance(other, dict) else ""
+        if word and word.lower() not in seen:
+            seen.add(word.lower())
+            others.append({"word": word, "note": str(other.get("note") or "").strip()})
+    collocations = [str(c).strip() for c in data.get("collocations") or [] if str(c).strip()]
+    return {
+        "others": others,
+        "note": str(data.get("note") or "").strip(),
+        "collocations": collocations[:3],
+        "quiz": _contrast_quiz(data.get("quiz")) if others else None,
+    }
+
+
+def _contrast_quiz(quiz: Any) -> dict[str, Any] | None:
+    if not isinstance(quiz, dict):
+        return None
+    options = list(dict.fromkeys(str(o).strip() for o in quiz.get("options") or [] if str(o).strip()))
+    text = str(quiz.get("text") or "").strip()
+    if len(options) < 2 or not quiz.get("ru"):
+        return None
+    if BLANK not in text:
+        # Модель иногда пишет слово вместо пропуска: «She likes to wear a hat».
+        text = re.sub(rf"\b{re.escape(options[0])}\b", BLANK, text, count=1)
+    if BLANK not in text:
+        return None
+    return {"text": text, "ru": str(quiz["ru"]).strip(), "options": options}
+
+
+async def fetch_contrast(cfg: Settings, lemma: str, pos: str, translation: str) -> dict[str, Any]:
+    return await _ask(cfg, CONTRAST_PROMPT, f"{lemma}\n{pos}\n{translation}", parse_contrast)
+
+
 def _zipf(value: Any) -> float:
     # Оценка нужна только фразам и только для порядка выдачи: кривое
     # число не повод терять перевод, но и выйти за шкалу оно не должно.
@@ -148,7 +208,21 @@ def parse_phrases(content: str) -> list[str]:
     return [" ".join(str(p).split()).lower() for p in phrases if str(p).strip()]
 
 
+# Сколько запросов к модели в пути: фоновое заполнение ждёт, пока их нет,
+# чтобы не занимать общий слот, когда человек ждёт карточку.
+in_flight = 0
+
+
 async def _chat(cfg: Settings, system: str, user: str, timeout: httpx.Timeout = TIMEOUT) -> str:
+    global in_flight
+    in_flight += 1
+    try:
+        return await _post(cfg, system, user, timeout)
+    finally:
+        in_flight -= 1
+
+
+async def _post(cfg: Settings, system: str, user: str, timeout: httpx.Timeout) -> str:
     payload = {
         "model": cfg.deepseek_model,
         "messages": [

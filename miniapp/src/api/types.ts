@@ -3,6 +3,15 @@ export interface Example {
   ru: string;
 }
 
+/** С чем слово путают и как различать; пишет ИИ фоном. */
+export interface Contrast {
+  others: { word: string; note: string }[];
+  note: string;
+  collocations: string[];
+  /** options[0] — правильный. */
+  quiz: { text: string; ru: string; options: string[] } | null;
+}
+
 export interface Card {
   id: number;
   /** Слово общего словаря: жалоба идёт на него, а не на карточку. */
@@ -33,6 +42,8 @@ export interface Card {
   note: string | null;
   /** Сколько раз слово забывали. */
   lapses: number;
+  /** null — ИИ ещё не разобрал слово. */
+  contrast: Contrast | null;
 }
 
 /** Перевод выделенного: слово — карточкой из словаря, предложение — моделью. */

@@ -79,7 +79,9 @@ def test_card_text_has_word_translation_and_example():
 
     entry = {"lemma": "go", "ipa": "ɡəʊ", "pos": "verb", "irregular": True, "forms": "go · went · gone",
              "form_note": "went → go", "translation": "идти", "top": "топ-100", "learners": 3,
-             "created": True, "examples": [{"en": "I go home.", "ru": "Я иду домой."}]}
+             "created": True, "examples": [{"en": "I go home.", "ru": "Я иду домой."}],
+             "contrast": {"others": [{"word": "walk", "note": "пешком"}], "note": "", "collocations": ["go home"], "quiz": None}}
     text = card_text(entry)
     assert text.startswith("go\n/ɡəʊ/ · verb · неправильное")
     assert "👉 идти" in text and "• I go home." in text and "✅ добавлено" in text
+    assert "walk — пешком" in text and "🔗 go home" in text

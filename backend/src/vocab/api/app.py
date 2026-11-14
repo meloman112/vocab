@@ -14,7 +14,7 @@ from .. import lexicon
 from ..config import settings
 from ..db import create_pool, migrate
 from ..dictionary import backfill_zipf
-from .. import grammar
+from .. import fill_contrast, grammar
 from ..mcp.server import build_mcp_app
 from .classwork import router as classwork_router
 from .grammar import router as grammar_router
@@ -53,9 +53,12 @@ def create_app() -> FastAPI:
         lexicon.rank(0)
         # Битый content.json должен ронять старт, а не первого ученика.
         log.info("тетрадь: %s заданий", len(grammar.content().items))
+        filler = fill_contrast.start(app.state.pool, cfg) if cfg.deepseek_api_key else None
         try:
             yield
         finally:
+            if filler:
+                filler.cancel()
             await app.state.pool.close()
 
     app = FastAPI(

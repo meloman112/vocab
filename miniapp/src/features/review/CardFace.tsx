@@ -97,6 +97,14 @@ export function CardFace({ card, flipped, onFlip }: Props) {
               <Caption className="card__example-ru">{example.ru}</Caption>
             </Fragment>
           ))}
+          {card.contrast?.others.length ? (
+            <Caption className="card__pos">
+              ⚖️ Не путай: {card.contrast.others.map((o) => `${o.word} — ${o.note}`).join('; ')}
+            </Caption>
+          ) : null}
+          {card.contrast?.collocations.length ? (
+            <Caption className="card__pos">🔗 {card.contrast.collocations.join(' · ')}</Caption>
+          ) : null}
           <LeechNote key={card.id} card={card} />
           <Caption className="card__pos">
             ⭐ {card.top} · учат: {card.learners}

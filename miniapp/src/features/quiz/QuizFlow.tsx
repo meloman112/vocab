@@ -5,6 +5,7 @@ import { POS_NAMES } from '../../lib/word';
 import { SessionSummary } from '../review/SessionSummary';
 import { acceptedWords } from './check';
 import { Choice } from './exercises/Choice';
+import { Contrast } from './exercises/Contrast';
 import { FormChoice } from './exercises/FormChoice';
 import { Forms } from './exercises/Forms';
 import { Pairs } from './exercises/Pairs';
@@ -95,13 +96,17 @@ function Flow({ mode, onCards, onLeaderboard, session }: Props & { session: Sess
           <main className="quiz">
             {/* key: новый раунд — новое состояние упражнения, без ручного сброса.
                 В тренировке упражнение — текущая ступенька слова. */}
-            <Exercise
-              key={session.turn}
-              mode={session.step ? modeById(session.step) : mode}
-              round={session.round}
-              secondChance={session.step !== null}
-              onDone={session.finish}
-            />
+            {session.step === 'contrast' ? (
+              <Contrast key={session.turn} card={session.round[0]!} onDone={session.finish} />
+            ) : (
+              <Exercise
+                key={session.turn}
+                mode={session.step ? modeById(session.step) : mode}
+                round={session.round}
+                secondChance={session.step !== null}
+                onDone={session.finish}
+              />
+            )}
           </main>
         </div>
       );

@@ -35,6 +35,27 @@ class Example(BaseModel):
     ru: str
 
 
+class ContrastOther(BaseModel):
+    word: str
+    note: str
+
+
+class ContrastQuiz(BaseModel):
+    # Предложение с ___; options[0] — правильный, клиент перемешивает.
+    text: str
+    ru: str
+    options: list[str]
+
+
+class Contrast(BaseModel):
+    """С чем слово путают и как различать. Пустой others — путать не с чем."""
+
+    others: list[ContrastOther]
+    note: str = ""
+    collocations: list[str] = []
+    quiz: ContrastQuiz | None = None
+
+
 class CardOut(BaseModel):
     id: int
     # Жалоба идёт на слово общего словаря, а не на личную карточку.
@@ -65,6 +86,8 @@ class CardOut(BaseModel):
     note: str | None
     # Сколько раз слово забывали: от LEECH_LAPSES просим свою ассоциацию.
     lapses: int
+    # None — ИИ ещё не разобрал слово.
+    contrast: Contrast | None
 
 
 class OtherSense(BaseModel):
@@ -96,6 +119,7 @@ class WordEntry(BaseModel):
     # Различие «добавили» и «уже было» нужно боту, чтобы ответить честно.
     created: bool
     others: list[OtherSense]
+    contrast: Contrast | None
 
 
 class AddWordOut(BaseModel):

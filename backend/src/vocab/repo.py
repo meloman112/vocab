@@ -9,7 +9,7 @@ import asyncpg
 # явный, чтобы select * не начал утекать в ответ API с новой колонкой.
 CARD_SELECT = """
     select c.id, w.id as word_id, w.lemma as word, w.translation, w.ipa, w.pos, w.forms,
-           w.irregular, w.examples, w.zipf, w.level, w.deck, w.topic,
+           w.irregular, w.examples, w.zipf, w.level, w.deck, w.topic, w.contrast,
            (select count(*) from cards l where l.word_id = w.id) as learners,
            exists (select 1 from words o where o.lemma = w.lemma and o.id <> w.id) as homonym,
            c.state, c.step, c.stability, c.difficulty, c.due, c.last_review, c.note,
@@ -22,7 +22,7 @@ CARD_SELECT = """
 IRREGULAR_DECK = "Неправильные глаголы"
 IRREGULAR_VERB = "w.irregular and w.pos = 'verb' and w.forms like '% · % · %'"
 
-WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, level, banned"
+WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zipf, level, banned, contrast"
 
 # 10 очков за каждое повторение, как в Duolingo — за урок.
 XP_PER_REVIEW = 10

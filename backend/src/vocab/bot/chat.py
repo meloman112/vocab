@@ -65,6 +65,18 @@ def card_data(entry: dict[str, Any]) -> dict[str, Any]:
     }, "e")
 
 
+def contrast_lines(contrast: dict[str, Any] | None) -> list[str]:
+    """«⚖️ Не путай: carry — нести в руках» и частые сочетания."""
+    if not contrast:
+        return []
+    lines = []
+    if contrast["others"]:
+        lines += ["", "⚖️ Не путай:"] + [f"{o['word']} — {o['note']}" for o in contrast["others"]]
+    if contrast["collocations"]:
+        lines += ["", "🔗 " + " · ".join(contrast["collocations"])]
+    return lines
+
+
 def card_text(entry: dict[str, Any]) -> str:
     """Карточка обычным сообщением — когда виджеты запрещены."""
     head = " · ".join(filter(None, [f"/{entry['ipa']}/" if entry["ipa"] else "", entry["pos"],
@@ -76,6 +88,7 @@ def card_text(entry: dict[str, Any]) -> str:
         lines.append(entry["forms"])
     lines += ["", f"👉 {entry['translation']}", ""]
     lines += [f"• {e['en']}\n  {e['ru']}" for e in entry["examples"][:3]]
+    lines += contrast_lines(entry["contrast"])
     added = "✅ добавлено" if entry["created"] else "уже было у тебя"
     lines += ["", f"⭐ {entry['top']} · учат: {entry['learners']} · {added}"]
     return "\n".join(lines)
