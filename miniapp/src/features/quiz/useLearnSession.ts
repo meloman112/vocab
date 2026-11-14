@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { notify } from '../../lib/telegram';
 import { WRONG } from './check';
-import { answer, type Item, LEARN_SIZE, progress, start } from './learn';
+import { answer, dots, type Item, LEARN_SIZE, progress, spread, start } from './learn';
 import type { Result } from './useQuizSession';
 
 type Phase = 'loading' | 'error' | 'empty' | 'play' | 'done';
@@ -27,7 +27,7 @@ export function useLearnSession() {
     pending.current = [];
     try {
       const { cards } = await api.quiz('learn', LEARN_SIZE);
-      const items = cards.filter((card) => card.choices_ru.length >= 2).map(start);
+      const items = spread(cards.filter((card) => card.choices_ru.length >= 2).map(start));
       setQueue(items);
       setWords(items.length);
       setPhase(items.length === 0 ? 'empty' : 'play');
@@ -70,7 +70,7 @@ export function useLearnSession() {
     step: current ? current.steps[current.at]! : null,
     turn,
     progress: words ? progress(queue, words) : 0,
-    counter: `${words - queue.length}/${words} слов`,
+    counter: `${words - queue.length}/${words} слов${current ? ` · ${dots(current)}` : ''}`,
     answered: words,
     lapses,
     syncErrors,
