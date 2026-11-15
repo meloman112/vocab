@@ -5,13 +5,14 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
+from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, MenuButtonWebApp, WebAppInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from ..client import VocabAPI
 from ..config import settings
 from . import widget
 from .chat import HANDLERS
+from .groups import router as groups_router
 from .handlers import router
 from .reminders import start_scheduler
 from .teachers import router as teachers_router
@@ -31,6 +32,13 @@ COMMANDS = [
     BotCommand(command="top", description="Что учат чаще всего"),
 ]
 
+GROUP_COMMANDS = [
+    BotCommand(command="bind", description="Привязать группу к классу"),
+    BotCommand(command="dz", description="📒 Домашка: /dz 26-28"),
+    BotCommand(command="report", description="📊 Отчёт по домашке"),
+    BotCommand(command="helper", description="Назначить помощника (ответом)"),
+]
+
 
 async def main() -> None:
     cfg = settings()
@@ -46,6 +54,8 @@ async def main() -> None:
 
     dispatcher = Dispatcher()
     dispatcher.update.outer_middleware(widget.middleware(HANDLERS))
+    # Группы — первыми: остальные роутеры в них молчат.
+    dispatcher.include_router(groups_router)
     # Тетрадь и учителя — раньше слов: основной роутер ловит любой текст.
     dispatcher.include_router(teachers_router)
     dispatcher.include_router(router)
@@ -63,6 +73,7 @@ async def main() -> None:
             )
         )
         await bot.set_my_commands(COMMANDS)
+        await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
         scheduler = start_scheduler(bot, api, cfg, widgets)
         # widget_query aiogram сам не запросит: он его не знает.
         await dispatcher.start_polling(

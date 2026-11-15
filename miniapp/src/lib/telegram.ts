@@ -36,6 +36,7 @@ interface TelegramWebApp {
   platform: string;
   HapticFeedback: HapticFeedback;
   CloudStorage?: CloudStorage;
+  initDataUnsafe?: { start_param?: string };
   ready(): void;
   expand(): void;
   isVersionAtLeast(version: string): boolean;
@@ -78,11 +79,16 @@ export function initTelegram(): void {
 
 const query = new URLSearchParams(window.location.search);
 
+// Кнопки в группах открывают мини-апп ссылкой ?startapp=: web_app там не работает.
+// Параметр приходит как start_param: grammar, tests или test_<id>.
+const startParam = webApp?.initDataUnsafe?.start_param ?? '';
+const paramTest = startParam.match(/^test_(\d+)$/);
+
 /** Экран, на который открыли мини-апп: кнопки бота добавляют ?screen=grammar. */
-export const startScreen = query.get('screen');
+export const startScreen = query.get('screen') ?? (paramTest ? 'test' : startParam || null);
 
 /** Тест из сообщения бота: ?screen=test&id=7. */
-export const startTestId = Number(query.get('id')) || null;
+export const startTestId = Number(query.get('id') ?? paramTest?.[1]) || null;
 
 /** Окно «Переслать» Telegram: учитель отправляет ссылку класса в чат. */
 export function shareLink(url: string, text: string): void {

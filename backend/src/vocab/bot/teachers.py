@@ -13,6 +13,7 @@ from ..config import Settings
 
 log = logging.getLogger(__name__)
 router = Router()
+router.message.filter(F.chat.type == "private")
 
 INVITE_PREFIX = "teach_"
 CLASS_PREFIX = "class_"

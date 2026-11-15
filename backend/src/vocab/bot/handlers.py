@@ -23,6 +23,8 @@ from .widget import Widgets
 
 log = logging.getLogger(__name__)
 router = Router()
+# В группах бот отвечает только на команды класса (bot/groups.py).
+router.message.filter(F.chat.type == "private")
 
 MAX_TEXT_LEN = 300
 
