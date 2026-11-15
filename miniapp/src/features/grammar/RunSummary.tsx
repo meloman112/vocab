@@ -6,7 +6,7 @@ import { filled, pdfExercises } from './book';
 import type { RunProps } from './ExerciseRun';
 
 /** Итоги захода: сколько с первого раза, где были ошибки — с правильными ответами. */
-export function RunSummary({ grammar, keys, title, review, again, onHome, onMistakes, onMix, toast }: RunProps) {
+export function RunSummary({ grammar, keys, title, review, onHome, onMistakes, onMix, toast }: RunProps) {
   const { book, progress } = grammar;
   const [sending, setSending] = useState(false);
   const results = progress.results;
@@ -45,9 +45,7 @@ export function RunSummary({ grammar, keys, title, review, again, onHome, onMist
           <div className="g-mistakes">
             {wrong.map((k) => (
               <div key={k} className="g-mistake">
-                <span className="g-num">
-                  {again ? `${book.items.get(k)!.n}.` : `${book.items.get(k)!.ex}.${book.items.get(k)!.n}`}
-                </span>
+                <span className="g-num">{`${book.items.get(k)!.ex}.${book.items.get(k)!.n}`}</span>
                 {filled(book, k).map((p, i) => (p.answer ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}
               </div>
             ))}
@@ -61,11 +59,7 @@ export function RunSummary({ grammar, keys, title, review, again, onHome, onMist
             Отправить PDF в чат
           </Button>
         )}
-        {again ? (
-          <Button size="l" mode="bezeled" stretched onClick={again}>
-            Ещё тренировка
-          </Button>
-        ) : anyMistakes ? (
+        {anyMistakes ? (
           <Button size="l" mode="bezeled" stretched onClick={onMistakes}>
             Работа над ошибками
           </Button>

@@ -727,3 +727,105 @@
   font-size: 13px;
   font-style: italic;
 }
+
+/* --- тренировка форм: таблица времён --- */
+
+.g-drill {
+  gap: 12px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+.g-tense {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--g-bg);
+}
+
+.g-tense h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 16px;
+}
+
+.g-tense h3 small {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.g-field label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.g-sign {
+  flex: none;
+  width: 1.2em;
+  text-align: center;
+  font: 700 22px/1 var(--tgui--font-family);
+  color: var(--g-muted);
+}
+
+.g-field input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  font: 18px var(--tgui--font-family);
+  color: var(--g-pen);
+  border: 0;
+  border-bottom: 2px solid var(--g-pen);
+  border-radius: 6px 6px 0 0;
+  padding: 8px 10px;
+  background: var(--g-pen-soft);
+}
+
+.g-field input:focus {
+  outline: none;
+  background: var(--g-bg);
+  box-shadow: 0 0 0 2px var(--g-pen) inset;
+}
+
+.g-field.ok input {
+  color: var(--g-ok);
+  border-color: var(--g-ok);
+  background: var(--g-ok-soft);
+}
+
+.g-field.bad input {
+  color: var(--g-red);
+  border-color: var(--g-red);
+  background: var(--g-red-soft);
+}
+
+.g-why {
+  margin: 6px 0 2px 2.2em;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--g-ink);
+}
+
+.g-why b {
+  color: var(--g-red);
+}
+
+.g-why i {
+  display: block;
+  color: var(--g-muted);
+}
+
+.g-why button {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  font: 600 14px var(--tgui--font-family);
+  color: var(--g-pen);
+  background: none;
+  cursor: pointer;
+}
