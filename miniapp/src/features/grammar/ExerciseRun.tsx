@@ -51,13 +51,11 @@ export interface RunProps {
   onHome: () => void;
   onMistakes: () => void;
   onMix: () => void;
-  /** Тренировка форм: заново с новыми глаголами. Её задания не из книги: ни ИИ, ни номера упражнения. */
-  again?: () => void;
   toast: (text: string) => void;
 }
 
 export function ExerciseRun(props: RunProps) {
-  const { grammar, keys, title, review, again, toast } = props;
+  const { grammar, keys, title, review, toast } = props;
   const { book, progress, save } = grammar;
   const [pos, setPos] = useState(() => (review ? 0 : Math.max(0, keys.findIndex((k) => !progress.results[k]))));
   const [summary, setSummary] = useState(false);
@@ -232,7 +230,7 @@ export function ExerciseRun(props: RunProps) {
 
       {/* key — задание: поля ввода неуправляемые и должны пересоздаваться. */}
       <section className="g-sheet" ref={sheetRef} key={`${key}-${mode}`}>
-        <p className="g-task">{review && !again ? `Упражнение ${ex.id}. ${ex.task}` : ex.task}</p>
+        <p className="g-task">{review ? `Упражнение ${ex.id}. ${ex.task}` : ex.task}</p>
         <div className="g-sent">
           <span className="g-num">{item.n}.</span>
           {parts.map((p, pi) => {
@@ -266,7 +264,7 @@ export function ExerciseRun(props: RunProps) {
         <FeedbackView s={s} slots={slots} fresh={s.fresh} clean={progress.results[key]?.clean}
           rule={ruleFor(book, ex, s.bad.find((b) => b.rule)?.rule, slots.find((x) => x.tense)?.tense)}
           onHint={(n) => { s.hints = n; rerender(); }}
-          onRecheck={again ? undefined : recheck}
+          onRecheck={recheck}
           onShow={() => { for (const b of s.bad) s.shown[b.j] = true; s.hints = 3; rerender(); }} />
       </section>
 

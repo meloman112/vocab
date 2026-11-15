@@ -6,10 +6,11 @@ import type { GrammarResult, TopicData } from '../../api/types';
 import { shuffle } from '../../lib/shuffle';
 import { useBackButton } from '../../lib/telegram';
 import { pdfExercises, type Book, type Exercise } from './book';
-import { buildDrill, knownTenses, ladder } from './drill';
+import { DrillScreen } from './DrillScreen';
+import { knownTenses, ladder } from './drill';
 import { TENSES, type Tense } from './engine';
 import { ExerciseRun } from './ExerciseRun';
-import { useGrammar, type Grammar } from './useGrammar';
+import { useGrammar } from './useGrammar';
 import './grammar.css';
 
 const MIX_SIZE = 10;
@@ -17,7 +18,7 @@ const MIX_SIZE = 10;
 type View =
   | { name: 'home' }
   | { name: 'topic'; id: string }
-  | { name: 'drill'; book: Book; keys: string[]; back: View; nonce: number }
+  | { name: 'drill'; back: View }
   | { name: 'run'; keys: string[]; title: string; review: boolean; back: View; nonce: number };
 
 /** Тетрадь: темы → упражнения → задания по одному, итоги и работа над ошибками. */
@@ -66,20 +67,11 @@ export function GrammarScreen({ onExit }: { onExit: () => void }) {
   const startMix = () => run(shuffle(solved()).slice(0, MIX_SIZE), 'Вперемешку', true);
 
   const tenses = ladder(knownTenses(book, results));
-  async function startDrill() {
-    try {
-      const drill = buildDrill(book, await api.grammar.verbs(), tenses);
-      setView({ name: 'drill', ...drill, back: view.name === 'drill' ? view.back : view, nonce: Date.now() });
-    } catch (e) {
-      toast(`Тренировка не началась: ${(e as Error).message}`);
-    }
-  }
 
   const content = (() => {
     switch (view.name) {
       case 'drill':
-        return <DrillRun key={view.nonce} grammar={data} view={view} onHome={() => setView(view.back)}
-          again={startDrill} toast={toast} />;
+        return <DrillScreen book={book} results={results} onHome={() => setView(view.back)} />;
       case 'run':
         return (
           <ExerciseRun key={view.nonce} grammar={data} keys={view.keys} title={view.title} review={view.review}
@@ -92,7 +84,7 @@ export function GrammarScreen({ onExit }: { onExit: () => void }) {
       }
       case 'home':
         return <Home book={book} results={results} wrong={mistakes().length} solved={solved().length}
-          tenses={tenses} onDrill={startDrill} onTopic={(id) => setView({ name: 'topic', id })} onMistakes={startMistakes} onMix={startMix} toast={toast} />;
+          tenses={tenses} onDrill={() => setView({ name: 'drill', back: view })} onTopic={(id) => setView({ name: 'topic', id })} onMistakes={startMistakes} onMix={startMix} toast={toast} />;
     }
   })();
 
@@ -102,24 +94,6 @@ export function GrammarScreen({ onExit }: { onExit: () => void }) {
       {toastText && <div className="g-toast" role="status">{toastText}</div>}
     </>
   );
-}
-
-/** Тренировка форм: итоги живут только в этом заходе, в тетрадь и учителю не идут. */
-function DrillRun({ grammar, view, onHome, again, toast }: {
-  grammar: Grammar;
-  view: { book: Book; keys: string[] };
-  onHome: () => void;
-  again: () => void;
-  toast: (text: string) => void;
-}) {
-  const [local, setLocal] = useState<Record<string, GrammarResult>>({});
-  const drill: Grammar = {
-    book: view.book,
-    progress: { ...grammar.progress, results: { ...grammar.progress.results, ...local } },
-    save: async (a) => setLocal((r) => ({ ...r, [a.item]: { clean: a.clean, was_wrong: !a.clean, answers: a.answers } })),
-  };
-  return <ExerciseRun grammar={drill} keys={view.keys} title="Тренировка форм" review again={again}
-    onHome={onHome} onMistakes={again} onMix={again} toast={toast} />;
 }
 
 function countDone(book: Book, ids: number[], results: Record<string, GrammarResult>) {

@@ -5,6 +5,9 @@ import { api } from '../../api/client';
 import type { Me, Stats, StudentTest } from '../../api/types';
 import { MODES, type ModeId } from '../quiz/modes';
 
+/** По данным пользуются только этими; остальные режимы — под «Ещё». */
+const MAIN_MODES: ModeId[] = ['learn', 'irregular'];
+
 interface Props {
   onGrammar: () => void;
   onTeacher: () => void;
@@ -27,6 +30,7 @@ export function HomeScreen({ onGrammar, onTeacher, onTests, onCards, onDeck, onQ
   const [header, setHeader] = useState<Header | null>(null);
   const [error, setError] = useState('');
   const [tests, setTests] = useState<StudentTest[]>([]);
+  const [moreModes, setMoreModes] = useState(false);
 
   useEffect(() => {
     Promise.all([api.stats(), api.me()])
@@ -92,7 +96,7 @@ export function HomeScreen({ onGrammar, onTeacher, onTests, onCards, onDeck, onQ
         </Section>
 
         <Section header="Тесты" footer="Ответ в тесте засчитывается как повторение: ошибся — слово вернётся скорее.">
-          {MODES.map((mode) => (
+          {(moreModes ? MODES : MODES.filter((m) => MAIN_MODES.includes(m.id))).map((mode) => (
             <Cell
               key={mode.id}
               before={<Icon>{mode.icon}</Icon>}
@@ -102,6 +106,11 @@ export function HomeScreen({ onGrammar, onTeacher, onTests, onCards, onDeck, onQ
               {mode.title}
             </Cell>
           ))}
+          {!moreModes && (
+            <Cell before={<Icon>⋯</Icon>} onClick={() => setMoreModes(true)}>
+              Ещё
+            </Cell>
+          )}
         </Section>
 
         <Section>
