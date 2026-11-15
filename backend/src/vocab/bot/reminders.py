@@ -16,6 +16,7 @@ from ..config import Settings
 from . import chat
 from .handlers import review_keyboard
 from .widget import Widgets
+from .exams import post_summaries
 from .teachers import test_keyboard
 
 log = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) ->
                           id=f"warmup-{hour}", misfire_grace_time=300)
     scheduler.add_job(send_digest, CronTrigger(day_of_week=cfg.digest_days, hour=cfg.digest_hour, minute=0),
                       args=(bot, api, cfg), id="digest", misfire_grace_time=300)
+    scheduler.add_job(post_summaries, IntervalTrigger(seconds=30), args=(bot, api), id="exam-summaries")
     scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()
     log.info("напоминания в %s, разминки в %s (%s)", cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)

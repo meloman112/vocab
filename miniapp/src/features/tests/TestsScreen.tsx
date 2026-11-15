@@ -1,5 +1,5 @@
 import { Badge, Button, Caption, Cell, List, Placeholder, Section, Spinner, Text, Title } from '@telegram-apps/telegram-ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../api/client';
 import type { StudentTest } from '../../api/types';
@@ -9,6 +9,16 @@ import '../grammar/grammar.css';
 import './tests.css';
 
 export const dayMonth = (iso: string) => new Date(`${iso}T00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+/** «до 14:35» у контрольной на уроке, «до 5 марта» у домашнего теста. */
+export const deadline = (t: { due: string; ends_at: string | null }) => `до ${t.ends_at ? clock(t.ends_at) : dayMonth(t.due)}`;
+
+const minutesLeft = (ms: number) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
 /** Ученик: тесты от учителей его классов. openId — тест из сообщения бота. */
 export function TestsScreen({ openId, onExit }: { openId: number | null; onExit: () => void }) {
@@ -44,7 +54,7 @@ export function TestsScreen({ openId, onExit }: { openId: number | null; onExit:
         {todo.length > 0 && (
           <Section header="Нужно сдать">
             {todo.map((t) => (
-              <Cell key={t.id} multiline onClick={() => setOpen(t.id)} subtitle={`${t.teacher} · до ${dayMonth(t.due)} · вопросов: ${t.questions.length}`}
+              <Cell key={t.id} multiline onClick={() => setOpen(t.id)} subtitle={`${t.teacher} · ${deadline(t)} · вопросов: ${t.questions.length}`}
                 after={<Badge type="number" mode="critical">!</Badge>}>
                 {t.title}
               </Cell>
@@ -68,7 +78,7 @@ export function TestsScreen({ openId, onExit }: { openId: number | null; onExit:
 
 function statusLine(t: StudentTest): string {
   if (!t.submitted_at) return 'не сдан, срок прошёл';
-  return t.closed ? 'результат готов' : `сдан, результат после ${dayMonth(t.due)}`;
+  return t.closed ? 'результат готов' : `сдан, результат после ${t.ends_at ? clock(t.ends_at) : dayMonth(t.due)}`;
 }
 
 const DRAFT = (id: number) => `test-draft-${id}`;
@@ -88,6 +98,9 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const endsAt = test.ends_at ? Date.parse(test.ends_at) : null;
+  const [left, setLeft] = useState(endsAt === null ? null : endsAt - Date.now());
+  const autoSent = useRef(false);
   const firsts = firstGaps(test.questions);
   const running = !test.submitted_at && !test.closed;
 
@@ -106,8 +119,27 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
     }
   }
 
-  async function submit() {
+  // Время вышло: пустое тоже сдаём, а потом перечитываем тест — откроются балл и ключ.
+  useEffect(() => {
+    if (left === null || left > 0 || test.closed) return;
+    if (!running) return onSubmitted();
+    if (autoSent.current) return;
+    autoSent.current = true;
+    void send();
+  }, [left]);
+
+  useEffect(() => {
+    if (endsAt === null || test.closed) return;
+    const timer = setInterval(() => setLeft(endsAt - Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [endsAt, test.closed]);
+
+  function submit() {
     if (!confirm) return setConfirm(true);
+    return send();
+  }
+
+  async function send() {
     setBusy(true);
     try {
       await api.tests.submit(test.id, values);
@@ -128,15 +160,16 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
   const empty = values.filter((v) => !v.trim()).length;
   return (
     <div className="screen t-run">
+      {running && left !== null && <div className="t-timer">Осталось {minutesLeft(left)}</div>}
       <header className="t-head">
         <Title level="2" weight="1">{test.title}</Title>
-        <Caption className="hint">{test.teacher} · до {dayMonth(test.due)} включительно · одна попытка</Caption>
+        <Caption className="hint">{test.teacher} · {test.ends_at ? deadline(test) : `до ${dayMonth(test.due)} включительно`} · одна попытка</Caption>
       </header>
       {test.score !== null && (
         <div className="g-result"><div className="g-big">{test.score} / {test.total}</div><Text className="hint">верных ответов</Text></div>
       )}
       {test.submitted_at && !test.closed && (
-        <div className="g-fb ok">Тест сдан ✓ Результат и правильные ответы появятся после {dayMonth(test.due)}.</div>
+        <div className="g-fb ok">Тест сдан ✓ Результат и правильные ответы появятся после {test.ends_at ? clock(test.ends_at) : dayMonth(test.due)}.</div>
       )}
       {!test.submitted_at && test.closed && <div className="g-fb bad">Срок прошёл, тест не сдан.</div>}
       <section className="g-sheet">

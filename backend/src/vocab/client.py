@@ -120,3 +120,24 @@ class VocabAPI:
 
     async def test_reminders(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/test-reminders")
+
+    async def teacher_classes(self, tg_id: int) -> list[dict[str, Any]]:
+        return await self._call("GET", "/teacher/classes", tg_id)
+
+    async def convert_test(self, tg_id: int, text: str) -> dict[str, Any]:
+        return await self._call("POST", "/teacher/tests/convert", tg_id, json={"text": text})
+
+    async def convert_result(self, tg_id: int, job: str) -> list[dict[str, Any]] | None:
+        return await self._call("GET", f"/teacher/tests/convert/{job}", tg_id)
+
+    async def start_live_test(self, tg_id: int, class_id: int, title: str, text: str, minutes: int) -> dict[str, Any]:
+        return await self._call(
+            "POST", "/teacher/tests/live", tg_id,
+            json={"class_id": class_id, "title": title, "text": text, "minutes": minutes},
+        )
+
+    async def finish_test(self, tg_id: int, test_id: int) -> None:
+        await self._call("POST", f"/teacher/tests/{test_id}/finish", tg_id)
+
+    async def test_summaries(self) -> list[dict[str, Any]]:
+        return await self._call("POST", "/internal/tests/summaries")

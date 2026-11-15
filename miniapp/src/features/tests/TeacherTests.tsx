@@ -5,7 +5,7 @@ import { api } from '../../api/client';
 import type { SchoolClass, TestRow } from '../../api/types';
 import { notify, shareLink } from '../../lib/telegram';
 import { plural } from '../teacher/format';
-import { dayMonth } from './TestsScreen';
+import { deadline } from './TestsScreen';
 
 /** Вкладка «Тесты» у учителя: классы со ссылками и отправленные тесты. */
 export function TeacherTests({ onNew, onOpen }: { onNew: () => void; onOpen: (id: number) => void }) {
@@ -48,7 +48,7 @@ export function TeacherTests({ onNew, onOpen }: { onNew: () => void; onOpen: (id
         </Cell>
         {tests.map((t) => (
           <Cell key={t.id} multiline onClick={() => onOpen(t.id)}
-            subtitle={`${t.class_name} · ${t.closed ? 'срок прошёл' : `до ${dayMonth(t.due)}`} · сдали ${t.submitted} из ${t.members}`}>
+            subtitle={`${t.class_name} · ${t.closed ? 'срок прошёл' : deadline(t)} · сдали ${t.submitted} из ${t.members}`}>
             {t.title}
           </Cell>
         ))}
