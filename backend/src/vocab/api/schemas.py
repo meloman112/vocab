@@ -661,3 +661,20 @@ class TestReminder(BaseModel):
     test_id: int
     title: str
     due: date
+
+
+# --- класс в группе Telegram ---
+
+
+class BindIn(BaseModel):
+    class_id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
+
+
+class AssistantIn(BaseModel):
+    tg_id: int
+    name: str = Field(max_length=64)
+
+
+class HomeworkIn(BaseModel):
+    exercises: list[int] = Field(min_length=1, max_length=200)

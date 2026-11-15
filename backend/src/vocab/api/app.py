@@ -20,6 +20,7 @@ from ..grammar import pdf
 from ..mcp.server import build_mcp_app
 from .classwork import router as classwork_router
 from .grammar import router as grammar_router
+from .groups import router as groups_router
 from .routes import router
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(grammar_router)
     app.include_router(classwork_router)
+    app.include_router(groups_router)
     app.mount("/mcp", mcp_app)
 
     if STATIC_DIR.is_dir():

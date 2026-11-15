@@ -1174,3 +1174,103 @@ async def test_reminders(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Reco
         """,
         tz,
     )
+
+
+# --- класс в группе Telegram -----------------------------------------------------
+
+
+async def bind_chat(conn: asyncpg.Connection, class_id: int, chat_id: int) -> None:
+    """Чат принадлежит одному классу: прежняя привязка снимается."""
+    async with conn.transaction():
+        await conn.execute("update classes set chat_id = null where chat_id = $1", chat_id)
+        await conn.execute("update classes set chat_id = $2 where id = $1", class_id, chat_id)
+
+
+async def chat_class(conn: asyncpg.Connection, chat_id: int, user_id: int) -> asyncpg.Record | None:
+    """Класс группы и роль пользователя в нём."""
+    return await conn.fetchrow(
+        "select c.id, c.name, c.teacher_id,"
+        " coalesce((select m.assistant from class_members m"
+        "           where m.class_id = c.id and m.user_id = $2), false) as assistant"
+        " from classes c where c.chat_id = $1",
+        chat_id, user_id,
+    )
+
+
+async def join_chat_class(conn: asyncpg.Connection, class_id: int, user_id: int) -> bool:
+    status = await conn.execute(
+        "insert into class_members (class_id, user_id) values ($1, $2) on conflict do nothing",
+        class_id, user_id,
+    )
+    return status == "INSERT 0 1"
+
+
+async def toggle_assistant(conn: asyncpg.Connection, class_id: int, user_id: int) -> bool:
+    """Нового участника делает помощником, а у помощника роль снимает."""
+    return await conn.fetchval(
+        "insert into class_members (class_id, user_id, assistant) values ($1, $2, true)"
+        " on conflict (class_id, user_id) do update set assistant = not class_members.assistant"
+        " returning assistant",
+        class_id, user_id,
+    )
+
+
+async def set_homework(conn: asyncpg.Connection, class_id: int, exercises: list[int], user_id: int) -> None:
+    await conn.execute(
+        "insert into homework (class_id, exercises, set_by) values ($1, $2, $3)"
+        " on conflict (class_id) do update set exercises = $2, set_by = $3, created_at = now()",
+        class_id, exercises, user_id,
+    )
+
+
+async def homework(conn: asyncpg.Connection, class_id: int) -> list[int] | None:
+    return await conn.fetchval("select exercises from homework where class_id = $1", class_id)
+
+
+async def homework_report(conn: asyncpg.Connection, class_id: int, exercises: list[int]) -> dict:
+    """Кто сколько сделал из домашки. Правила те же, что в digest: ошибки
+    неразобранные, вид ошибки — текст `why` до первой точки."""
+    students = await conn.fetch(
+        """
+        with r as (
+          select user_id, count(*) as done,
+                 count(*) filter (where clean and not was_wrong) as first_try
+          from grammar_results
+          where split_part(item, '-', 1)::int = any($2::int[])
+          group by user_id
+        ),
+        kinds as (
+          select user_id, split_part(why, '.', 1) as kind, count(*) as n
+          from grammar_mistakes
+          where accepted_by is null and why <> '' and split_part(item, '-', 1)::int = any($2::int[])
+          group by user_id, kind
+        ),
+        top as (select distinct on (user_id) * from kinds order by user_id, n desc, kind)
+        select coalesce(u.name, 'Без имени') as name, coalesce(r.done, 0) as done,
+               coalesce(r.first_try, 0) as first_try, top.kind as top_mistake, top.n as top_count
+        from class_members m
+        join classes c on c.id = m.class_id
+        join users u on u.id = m.user_id
+        left join r on r.user_id = m.user_id
+        left join top on top.user_id = m.user_id
+        where m.class_id = $1 and m.user_id <> c.teacher_id
+        order by name
+        """,
+        class_id, exercises,
+    )
+    hard_items = await conn.fetch(
+        """
+        select k.item, count(distinct k.user_id) as students
+        from grammar_mistakes k
+        join class_members m on m.user_id = k.user_id and m.class_id = $1
+        join classes c on c.id = m.class_id
+        where k.accepted_by is null and k.user_id <> c.teacher_id
+          and split_part(k.item, '-', 1)::int = any($2::int[])
+        group by k.item
+        having count(distinct k.user_id) >= 2
+        order by students desc, k.item
+        limit 5
+        """,
+        class_id, exercises,
+    )
+    return {"students": [dict(s) for s in students], "hard_items": [dict(i) for i in hard_items]}

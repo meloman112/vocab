@@ -118,5 +118,37 @@ class VocabAPI:
     async def join_class(self, tg_id: int, tg_name: str, code: str) -> dict[str, Any]:
         return await self._call("POST", f"/classes/{code}/join", tg_id, tg_name)
 
+    async def bind_group(
+        self, tg_id: int, tg_name: str, chat_id: int, title: str, class_id: int | None = None
+    ) -> dict[str, Any]:
+        return await self._call(
+            "POST", f"/groups/{chat_id}/bind", tg_id, tg_name,
+            json={"class_id": class_id, "title": title},
+        )
+
+    async def join_group(self, tg_id: int, tg_name: str, chat_id: int) -> dict[str, Any]:
+        return await self._call("POST", f"/groups/{chat_id}/join", tg_id, tg_name)
+
+    async def toggle_assistant(
+        self, tg_id: int, tg_name: str, chat_id: int, helper_tg_id: int, helper_name: str
+    ) -> dict[str, Any]:
+        return await self._call(
+            "POST", f"/groups/{chat_id}/assistant", tg_id, tg_name,
+            json={"tg_id": helper_tg_id, "name": helper_name},
+        )
+
+    async def set_homework(
+        self, tg_id: int, tg_name: str, chat_id: int, exercises: list[int]
+    ) -> dict[str, Any]:
+        return await self._call(
+            "PUT", f"/groups/{chat_id}/homework", tg_id, tg_name, json={"exercises": exercises}
+        )
+
+    async def homework(self, tg_id: int, tg_name: str, chat_id: int) -> dict[str, Any]:
+        return await self._call("GET", f"/groups/{chat_id}/homework", tg_id, tg_name)
+
+    async def homework_report(self, tg_id: int, tg_name: str, chat_id: int) -> dict[str, Any]:
+        return await self._call("GET", f"/groups/{chat_id}/report", tg_id, tg_name)
+
     async def test_reminders(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/test-reminders")
