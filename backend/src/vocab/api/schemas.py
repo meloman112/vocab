@@ -211,6 +211,26 @@ class ReminderTarget(BaseModel):
     due: int
 
 
+class DigestStudent(BaseModel):
+    name: str
+    done: int
+    first_try: int
+    # Самый частый тип ошибки за неделю; None — ошибок не было.
+    top_mistake: str | None
+    top_count: int | None
+
+
+class DigestItem(BaseModel):
+    item: str
+    students: int
+
+
+class Digest(BaseModel):
+    students: list[DigestStudent]
+    hard_items: list[DigestItem]
+    teachers: list[int]
+
+
 class WarmupTarget(BaseModel):
     tg_id: int
     due: int

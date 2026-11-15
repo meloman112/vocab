@@ -91,6 +91,9 @@ class VocabAPI:
     async def reminder_targets(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/reminders")
 
+    async def digest(self) -> dict[str, Any]:
+        return await self._call("GET", "/internal/digest")
+
     async def ban(self, word: str) -> None:
         await self._call("POST", "/internal/ban", json={"word": word})
 

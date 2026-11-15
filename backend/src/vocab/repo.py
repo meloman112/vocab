@@ -928,6 +928,49 @@ async def common_mistakes(conn: asyncpg.Connection, limit: int) -> list[asyncpg.
     )
 
 
+async def digest(conn: asyncpg.Connection) -> dict:
+    """Сводка тетради за неделю для учителя: кто занимался, на чём ошибается
+    и какие задания не даются сразу нескольким ученикам."""
+    students = await conn.fetch(
+        """
+        with r as (
+          select user_id, count(*) as done,
+                 count(*) filter (where clean and not was_wrong) as first_try
+          from grammar_results where updated_at > now() - interval '7 days'
+          group by user_id
+        ),
+        kinds as (
+          select user_id, split_part(why, '.', 1) as kind, count(*) as n
+          from grammar_mistakes
+          where accepted_by is null and why <> '' and created_at > now() - interval '7 days'
+          group by user_id, kind
+        ),
+        top as (select distinct on (user_id) * from kinds order by user_id, n desc, kind)
+        select coalesce(u.name, 'Без имени') as name, r.done, r.first_try,
+               top.kind as top_mistake, top.n as top_count
+        from r join users u on u.id = r.user_id
+        left join top on top.user_id = r.user_id
+        order by r.done desc, name
+        """
+    )
+    hard_items = await conn.fetch(
+        """
+        select item, count(distinct user_id) as students
+        from grammar_mistakes
+        where accepted_by is null and created_at > now() - interval '7 days'
+        group by item
+        having count(distinct user_id) >= 2
+        order by students desc, item
+        limit 3
+        """
+    )
+    teachers = await conn.fetch("select tg_id from users where is_teacher")
+    return {
+        "students": students, "hard_items": hard_items,
+        "teachers": [t["tg_id"] for t in teachers],
+    }
+
+
 async def grammar_summary(conn: asyncpg.Connection, user_id: int) -> asyncpg.Record:
     return await conn.fetchrow(
         "select count(*) as done, count(*) filter (where not clean) as wrong_now"

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -86,6 +87,43 @@ async def warmups(widgets: Widgets, api: VocabAPI, cfg: Settings) -> None:
             log.warning("не отправил разминку %s: %s", target["tg_id"], exc)
 
 
+def item_label(item: str) -> str:
+    """«23-3» — упражнение 23, индекс с нуля, а учитель считает с единицы."""
+    exercise, index = item.split("-")
+    return f"упр. {exercise} №{int(index) + 1}"
+
+
+def digest_text(digest: dict[str, Any]) -> str | None:
+    """Сводка тетради за неделю простым текстом: имена приходят от
+    пользователей, а без parse_mode их не нужно экранировать. None — молчать."""
+    students = digest["students"]
+    if not students:
+        return None
+    lines = ["📊 Тетрадь за неделю", f"Занимались: {len(students)}", ""]
+    for s in students:
+        line = f"{s['name']} — {s['done']} заданий, с первого раза {round(100 * s['first_try'] / s['done'])}%"
+        if s["top_mistake"]:
+            line += f". Чаще всего: {s['top_mistake']} ({s['top_count']})"
+        lines.append(line)
+    if digest["hard_items"]:
+        lines += ["", "Ошиблись несколько учеников:"]
+        lines += [f"• {item_label(i['item'])} — {i['students']} уч." for i in digest["hard_items"]]
+    return "\n".join(lines)
+
+
+async def send_digest(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
+    digest = await api.digest()
+    text = digest_text(digest)
+    if text is None:
+        return
+    markup = InlineKeyboardMarkup(inline_keyboard=[[chat.app_button(cfg, "👥 Ученики", "teacher")]])
+    for tg_id in digest["teachers"]:
+        try:
+            await bot.send_message(tg_id, text, reply_markup=markup)
+        except Exception as exc:  # noqa: BLE001 — как в notify: остальным учителям сводка дойти должна
+            log.warning("не отправил сводку %s: %s", tg_id, exc)
+
+
 async def keep_warm(bot: Bot, widgets: Widgets) -> None:
     """Пинг Telegram, чтобы соединения не простаивали: Telegram держит
     простаивающее соединение 3–7 минут, а новое с test_moe — до 3 с,
@@ -113,6 +151,8 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) ->
     for hour in cfg.warmup_hour_list:
         scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api, cfg),
                           id=f"warmup-{hour}", misfire_grace_time=300)
+    scheduler.add_job(send_digest, CronTrigger(day_of_week=cfg.digest_days, hour=cfg.digest_hour, minute=0),
+                      args=(bot, api, cfg), id="digest", misfire_grace_time=300)
     scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()
     log.info("напоминания в %s, разминки в %s (%s)", cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)

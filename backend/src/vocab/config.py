@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     reminder_hours: str = "9,20"
     # Разминка в чате — между напоминаниями, раз в 2–3 часа.
     warmup_hours: str = "11,14,17"
+    # Сводка по тетради учителю: дни недели в формате cron и час. Учитель
+    # подгоняет под расписание уроков.
+    digest_days: str = "mon"
+    digest_hour: int = Field(default=8, ge=0, le=23)
 
     log_level: str = "INFO"
     queue_limit: int = Field(default=50, ge=1, le=200)
