@@ -750,6 +750,19 @@ async def save_grammar_attempt(
         await touch_streak(conn, user_id, tz)
 
 
+async def first_wrong_attempts(
+    conn: asyncpg.Connection, user_id: int, items: list[str]
+) -> list[asyncpg.Record]:
+    """Первая незасчитанная ошибка на каждый пропуск: по ней учитель видит,
+    где ученик споткнулся, даже если потом он ответил верно."""
+    return await conn.fetch(
+        "select distinct on (item, slot) item, slot, answer, why from grammar_mistakes"
+        " where user_id = $1 and item = any($2) and accepted_by is null"
+        " order by item, slot, created_at, id",
+        user_id, items,
+    )
+
+
 async def import_grammar(
     conn: asyncpg.Connection, user_id: int, rows: list[tuple[str, bool, bool, list[str]]]
 ) -> int:
