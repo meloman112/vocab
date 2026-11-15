@@ -111,7 +111,7 @@ def test_contrast_dedupes_and_puts_blank_where_model_forgot():
         "note": "на себе", "collocations": ["wear glasses", "wear a hat"],
         "quiz": {"text": "She likes to wear a hat.", "ru": "Она любит носить шляпу.", "options": ["wear", "carry"]},
     }
-    got = parse_contrast(json.dumps(raw))
+    got = parse_contrast(json.dumps(raw), "wear")
     assert [o["word"] for o in got["others"]] == ["carry"]
     assert got["quiz"]["text"] == "She likes to ___ a hat."
 
@@ -119,7 +119,14 @@ def test_contrast_dedupes_and_puts_blank_where_model_forgot():
 def test_contrast_without_others_has_no_quiz_and_bad_quiz_is_dropped():
     from vocab.enrich import parse_contrast
 
-    assert parse_contrast('{"others": [], "quiz": {"text": "x ___", "ru": "x", "options": ["a", "b"]}}')["quiz"] is None
+    assert parse_contrast('{"others": [], "quiz": {"text": "x ___", "ru": "x", "options": ["a", "b"]}}', "a")["quiz"] is None
     one_option = {"others": [{"word": "lay", "note": "класть"}],
                   "quiz": {"text": "Please ___ down.", "ru": "Ляг.", "options": ["lie"]}}
-    assert parse_contrast(json.dumps(one_option))["quiz"] is None
+    assert parse_contrast(json.dumps(one_option), "lie")["quiz"] is None
+
+
+def test_contrast_drops_the_word_itself():
+    from vocab.enrich import parse_contrast
+
+    raw = {"others": [{"word": "Market", "note": "рынок"}, {"word": "mark", "note": "отметка"}], "quiz": None}
+    assert [o["word"] for o in parse_contrast(json.dumps(raw), "market")["others"]] == ["mark"]

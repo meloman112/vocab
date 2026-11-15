@@ -156,11 +156,12 @@ def parse_word(content: str) -> dict[str, Any]:
     }
 
 
-def parse_contrast(content: str) -> dict[str, Any]:
+def parse_contrast(content: str, lemma: str) -> dict[str, Any]:
     """С чем путают слово. Кривой тест выбрасывается, а не чинится сверх
-    простого: без пропуска или с одним вариантом это не упражнение."""
+    простого: без пропуска или с одним вариантом это не упражнение.
+    Само слово среди «путают с» модель иногда пишет (market: market) — отсеивается."""
     data = json.loads(content)
-    others, seen = [], set()
+    others, seen = [], {lemma.lower()}
     for other in data.get("others") or []:
         word = str(other.get("word") or "").strip() if isinstance(other, dict) else ""
         if word and word.lower() not in seen:
@@ -191,7 +192,8 @@ def _contrast_quiz(quiz: Any) -> dict[str, Any] | None:
 
 
 async def fetch_contrast(cfg: Settings, lemma: str, pos: str, translation: str) -> dict[str, Any]:
-    return await _ask(cfg, CONTRAST_PROMPT, f"{lemma}\n{pos}\n{translation}", parse_contrast)
+    return await _ask(cfg, CONTRAST_PROMPT, f"{lemma}\n{pos}\n{translation}",
+                      lambda content: parse_contrast(content, lemma))
 
 
 def _zipf(value: Any) -> float:
