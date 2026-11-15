@@ -7,7 +7,7 @@ import binascii
 import logging
 import secrets
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -23,6 +23,8 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 CLASS_PREFIX = "class_"
+# Автосдача в мини-аппе, когда время вышло, идёт по сети и приходит чуть позже конца.
+SUBMIT_GRACE = timedelta(seconds=20)
 
 _bot_username: str | None = None
 
@@ -38,10 +40,14 @@ async def _telegram(method: str, **payload: Any) -> dict[str, Any]:
     return answer["result"]
 
 
-async def _class_link(code: str) -> str:
+async def _bot_link(query: str) -> str:
     global _bot_username
     _bot_username = _bot_username or (await _telegram("getMe"))["username"]
-    return f"https://t.me/{_bot_username}?start={CLASS_PREFIX}{code}"
+    return f"https://t.me/{_bot_username}?{query}"
+
+
+async def _class_link(code: str) -> str:
+    return await _bot_link(f"start={CLASS_PREFIX}{code}")
 
 
 def _today():
@@ -138,18 +144,23 @@ async def _convert(text: str) -> list[schemas.ConvertedLine]:
     return out
 
 
-@router.post("/teacher/tests", response_model=schemas.TestCreated)
-async def post_test(
-    body: schemas.TestIn, request: Request, background: BackgroundTasks,
-    teacher_id: int = Depends(teacher_user),
-) -> schemas.TestCreated:
-    questions, errors = classwork.parse_text(body.text)
+def _questions(text: str) -> list[dict[str, Any]]:
+    questions, errors = classwork.parse_text(text)
     if errors:
         e = errors[0]
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             f"Строка {e['line']}: {e['error']}" if e["line"] else e["error"])
     if not questions:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "В тесте нет ни одного вопроса")
+    return questions
+
+
+@router.post("/teacher/tests", response_model=schemas.TestCreated)
+async def post_test(
+    body: schemas.TestIn, request: Request, background: BackgroundTasks,
+    teacher_id: int = Depends(teacher_user),
+) -> schemas.TestCreated:
+    questions = _questions(body.text)
     if body.due < _today():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Срок уже прошёл")
     async with request.app.state.pool.acquire() as conn:
@@ -158,10 +169,61 @@ async def post_test(
         test_id = await repo.create_test(conn, body.class_id, body.title.strip(), questions, body.due)
         tg_ids = await repo.class_member_tg_ids(conn, body.class_id)
         teacher = await repo.student(conn, teacher_id)
+        chat_id = await repo.class_chat_id(conn, body.class_id)
     text = (f"📝 Новый тест от {teacher['name']}: «{body.title.strip()}»\n"
             f"Вопросов: {len(questions)} · сдать до {body.due:%d.%m} · одна попытка")
-    background.add_task(_announce, tg_ids, text, test_id)
+    # Бот пишет в группу класса, а не каждому в личку; без группы — по-старому.
+    if chat_id:
+        background.add_task(_announce_group, chat_id, text, test_id)
+    else:
+        background.add_task(_announce, tg_ids, text, test_id)
     return schemas.TestCreated(id=test_id, sent=len(tg_ids))
+
+
+async def _announce_group(chat_id: int, text: str, test_id: int) -> None:
+    # web_app-кнопки в группах не работают, поэтому ссылка t.me/<бот>?startapp.
+    button = {"text": "Открыть тест", "url": await _bot_link(f"startapp=test_{test_id}")}
+    try:
+        await _telegram("sendMessage", chat_id=chat_id, text=text,
+                        reply_markup={"inline_keyboard": [[button]]})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("не отправил тест %s в группу %s: %s", test_id, chat_id, exc)
+
+
+@router.post("/teacher/tests/live", response_model=schemas.TestCreated)
+async def post_live_test(
+    body: schemas.LiveTestIn, request: Request, teacher_id: int = Depends(teacher_user)
+) -> schemas.TestCreated:
+    """Контрольная на уроке: время идёт с этой секунды, тест объявляется в группе класса."""
+    questions = _questions(body.text)
+    title = body.title.strip()
+    ends_at = datetime.now(UTC) + timedelta(minutes=body.minutes)
+    async with request.app.state.pool.acquire() as conn:
+        if not await repo.owns_class(conn, body.class_id, teacher_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого класса")
+        chat_id = await repo.class_chat_id(conn, body.class_id)
+        if chat_id is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "К классу не привязана группа: напиши /bind в группе класса")
+        test_id = await repo.create_test(conn, body.class_id, title, questions, _today(), ends_at)
+    until = ends_at.astimezone(ZoneInfo(settings().tz))
+    buttons = [
+        {"text": "Открыть", "url": await _bot_link(f"startapp=test_{test_id}")},
+        {"text": "⏹ Закончить", "callback_data": f"examstop:{test_id}"},
+    ]
+    await _telegram(
+        "sendMessage", chat_id=chat_id, reply_markup={"inline_keyboard": [buttons]},
+        text=(f"📝 Контрольная «{title}»\nВопросов: {len(questions)} · "
+              f"время: {body.minutes} мин, до {until:%H:%M} · одна попытка"),
+    )
+    return schemas.TestCreated(id=test_id, sent=0)
+
+
+@router.post("/teacher/tests/{test_id}/finish", status_code=status.HTTP_204_NO_CONTENT)
+async def finish_test(test_id: int, request: Request, teacher_id: int = Depends(teacher_user)) -> None:
+    async with request.app.state.pool.acquire() as conn:
+        if await repo.teacher_test(conn, test_id, teacher_id, settings().tz) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого теста")
+        await repo.finish_test(conn, test_id)
 
 
 async def _announce(tg_ids: list[int], text: str, test_id: int) -> None:
@@ -259,7 +321,7 @@ def _student_view(row, accepted: dict[int, set[str]]) -> schemas.StudentTest:
     show = row["closed"] and row["answers"] is not None
     marks = classwork.marks(questions, row["answers"], accepted) if show else None
     return schemas.StudentTest(
-        **{k: row[k] for k in ("id", "title", "due", "teacher", "closed", "submitted_at", "answers")},
+        **{k: row[k] for k in ("id", "title", "due", "ends_at", "teacher", "closed", "submitted_at", "answers")},
         total=len(classwork.gaps(questions)),
         score=sum(marks) if marks is not None else None,
         questions=questions if row["closed"] else classwork.hide_answers(questions),
@@ -283,6 +345,12 @@ async def get_my_test(test_id: int, request: Request, user_id: int = Depends(cur
         return _student_view(row, await repo.test_accepted(conn, test_id))
 
 
+def _can_submit(row, now: datetime) -> bool:
+    if not row["closed"]:
+        return True
+    return row["ends_at"] is not None and now < row["ends_at"] + SUBMIT_GRACE
+
+
 @router.post("/tests/{test_id}/submit", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_test(
     test_id: int, body: schemas.SubmitIn, request: Request, user_id: int = Depends(current_user)
@@ -291,7 +359,7 @@ async def submit_test(
         row = await repo.student_test(conn, test_id, user_id, settings().tz)
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Этого теста нет в твоих классах")
-        if row["closed"]:
+        if not _can_submit(row, datetime.now(UTC)):
             raise HTTPException(status.HTTP_410_GONE, "Срок сдачи прошёл")
         if len(body.answers) != len(classwork.gaps(row["questions"])):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Ответы не совпадают с вопросами")
@@ -306,3 +374,40 @@ async def test_reminders(request: Request) -> list[schemas.TestReminder]:
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.test_reminders(conn, settings().tz)
     return [schemas.TestReminder(**dict(r)) for r in rows]
+
+
+def _summary(test, rows, accepted: dict[int, set[str]]) -> schemas.TestSummary:
+    """Итог контрольной для группы. Вопрос верен, если верны все его пропуски."""
+    questions = test["questions"]
+    gap_question = [qi for qi, q in enumerate(questions) for p in q["parts"] if isinstance(p, dict)]
+    correct = [0] * len(questions)
+    students = []
+    for r in rows:
+        if r["answers"] is None:
+            students.append(schemas.SummaryStudent(name=r["name"], score=None))
+            continue
+        marks = classwork.marks(questions, r["answers"], accepted)
+        missed = {gap_question[i] for i, ok in enumerate(marks) if not ok}
+        for qi in range(len(questions)):
+            correct[qi] += qi not in missed
+        students.append(schemas.SummaryStudent(name=r["name"], score=sum(marks)))
+    answered = sum(s.score is not None for s in students)
+    hardest = sorted((c, qi) for qi, c in enumerate(correct) if c < answered)[:3]
+    return schemas.TestSummary(
+        test_id=test["id"], chat_id=test["chat_id"], title=test["title"], total=len(gap_question),
+        students=students,
+        hard=[schemas.HardQuestion(question=qi + 1, correct=c, answered=answered) for c, qi in hardest],
+    )
+
+
+@router.post("/internal/tests/summaries", response_model=list[schemas.TestSummary],
+             dependencies=[Depends(service_only)])
+async def test_summaries(request: Request) -> list[schemas.TestSummary]:
+    """Закончившиеся контрольные, о которых группе ещё не писали: помечает их
+    и отдаёт боту итоги. Транзакция — чтобы два вызова не вернули одно и то же."""
+    async with request.app.state.pool.acquire() as conn, conn.transaction():
+        tests = await repo.claim_summaries(conn, SUBMIT_GRACE)
+        return [
+            _summary(t, await repo.test_results(conn, t["id"]), await repo.test_accepted(conn, t["id"]))
+            for t in tests
+        ]

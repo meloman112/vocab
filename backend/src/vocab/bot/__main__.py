@@ -12,6 +12,7 @@ from ..client import VocabAPI
 from ..config import settings
 from . import widget
 from .chat import HANDLERS
+from .exams import router as exams_router
 from .groups import router as groups_router
 from .handlers import router
 from .reminders import start_scheduler
@@ -58,6 +59,7 @@ async def main() -> None:
     dispatcher.include_router(groups_router)
     # Тетрадь и учителя — раньше слов: основной роутер ловит любой текст.
     dispatcher.include_router(teachers_router)
+    dispatcher.include_router(exams_router)
     dispatcher.include_router(router)
 
     # Всё, что может упасть, — внутри try: иначе отказ Telegram на первом же

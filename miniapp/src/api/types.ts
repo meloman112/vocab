@@ -340,6 +340,8 @@ export interface TestRow {
   id: number;
   title: string;
   due: string;
+  /** Контрольная на уроке: когда время выйдет. */
+  ends_at: string | null;
   class_name: string;
   closed: boolean;
   members: number;
@@ -377,6 +379,7 @@ export interface StudentTest {
   id: number;
   title: string;
   due: string;
+  ends_at: string | null;
   teacher: string;
   closed: boolean;
   submitted_at: string | null;

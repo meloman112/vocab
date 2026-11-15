@@ -527,6 +527,8 @@ class ClassOut(BaseModel):
     members: int
     # t.me/<bot>?start=class_<code> — по ней ученики заходят в класс.
     link: str
+    # Группа Telegram, привязанная к классу.
+    chat_id: int | None = None
 
 
 class Joined(BaseModel):
@@ -568,6 +570,13 @@ class TestIn(BaseModel):
     text: str = Field(max_length=30000)
 
 
+class LiveTestIn(BaseModel):
+    class_id: int
+    title: str = Field(min_length=1, max_length=120)
+    text: str = Field(max_length=30000)
+    minutes: int = Field(ge=1, le=180)
+
+
 class TestCreated(BaseModel):
     id: int
     sent: int
@@ -594,6 +603,7 @@ class TestRow(BaseModel):
     id: int
     title: str
     due: date
+    ends_at: datetime | None
     class_name: str
     closed: bool
     members: int
@@ -641,6 +651,8 @@ class StudentTest(BaseModel):
     id: int
     title: str
     due: date
+    # Контрольная на уроке: когда время выйдет.
+    ends_at: datetime | None
     teacher: str
     closed: bool
     submitted_at: datetime | None
@@ -654,6 +666,28 @@ class StudentTest(BaseModel):
 
 class SubmitIn(BaseModel):
     answers: list[Annotated[str, Field(max_length=300)]] = Field(max_length=500)
+
+
+class SummaryStudent(BaseModel):
+    name: str
+    # None — не сдал.
+    score: int | None
+
+
+class HardQuestion(BaseModel):
+    # Номер вопроса с единицы, как его видит ученик.
+    question: int
+    correct: int
+    answered: int
+
+
+class TestSummary(BaseModel):
+    test_id: int
+    chat_id: int
+    title: str
+    total: int
+    students: list[SummaryStudent]
+    hard: list[HardQuestion]
 
 
 class TestReminder(BaseModel):

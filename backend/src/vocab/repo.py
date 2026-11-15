@@ -1,6 +1,7 @@
 """Весь SQL проекта. Наружу отдаёт asyncpg.Record — плоские строки без логики."""
 
 import json
+from datetime import timedelta
 from typing import Any
 
 import asyncpg
@@ -994,8 +995,12 @@ async def grammar_summary(conn: asyncpg.Connection, user_id: int) -> asyncpg.Rec
 
 # --- классы и тесты учителя ------------------------------------------------------
 
-# Срок прошёл: последний день сдачи — due включительно. $tz — часовой пояс.
-TEST_CLOSED = "(now() at time zone {tz})::date > t.due"
+# Срок прошёл. Контрольная на уроке — по времени ends_at, домашний тест: последний
+# день сдачи — due включительно. {tz} — часовой пояс.
+TEST_CLOSED = (
+    "(case when t.ends_at is not null then now() >= t.ends_at"
+    " else (now() at time zone {tz})::date > t.due end)"
+)
 
 
 async def create_class(
@@ -1010,7 +1015,7 @@ async def create_class(
 
 async def teacher_classes(conn: asyncpg.Connection, teacher_id: int) -> list[asyncpg.Record]:
     return await conn.fetch(
-        "select c.id, c.name, c.code,"
+        "select c.id, c.name, c.code, c.chat_id,"
         " (select count(*) from class_members m where m.class_id = c.id) as members"
         " from classes c where c.teacher_id = $1 order by c.created_at",
         teacher_id,
@@ -1043,11 +1048,34 @@ async def owns_class(conn: asyncpg.Connection, class_id: int, teacher_id: int) -
 
 
 async def create_test(
-    conn: asyncpg.Connection, class_id: int, title: str, questions: list, due: Any
+    conn: asyncpg.Connection, class_id: int, title: str, questions: list, due: Any,
+    ends_at: Any = None,
 ) -> int:
     return await conn.fetchval(
-        "insert into tests (class_id, title, questions, due) values ($1, $2, $3, $4) returning id",
-        class_id, title, questions, due,
+        "insert into tests (class_id, title, questions, due, ends_at) values ($1, $2, $3, $4, $5)"
+        " returning id",
+        class_id, title, questions, due, ends_at,
+    )
+
+
+async def class_chat_id(conn: asyncpg.Connection, class_id: int) -> int | None:
+    return await conn.fetchval("select chat_id from classes where id = $1", class_id)
+
+
+async def finish_test(conn: asyncpg.Connection, test_id: int) -> None:
+    """Контрольную закончили раньше времени. Уже закончившуюся не трогаем."""
+    await conn.execute("update tests set ends_at = now() where id = $1 and ends_at > now()", test_id)
+
+
+async def claim_summaries(conn: asyncpg.Connection, grace: timedelta) -> list[asyncpg.Record]:
+    """Закончившиеся контрольные, о которых группе ещё не писали; помечает их.
+    Ждём grace: сдача автоотправкой приходит чуть позже конца времени."""
+    return await conn.fetch(
+        "update tests t set summarized_at = now() from classes c"
+        " where c.id = t.class_id and c.chat_id is not null and t.summarized_at is null"
+        " and t.ends_at + $1::interval <= now()"
+        " returning t.id, t.title, t.questions, c.chat_id",
+        grace,
     )
 
 
@@ -1062,7 +1090,7 @@ async def class_member_tg_ids(conn: asyncpg.Connection, class_id: int) -> list[i
 async def teacher_tests(conn: asyncpg.Connection, teacher_id: int, tz: str) -> list[asyncpg.Record]:
     return await conn.fetch(
         f"""
-        select t.id, t.title, t.due, c.name as class_name, {TEST_CLOSED.format(tz='$2')} as closed,
+        select t.id, t.title, t.due, t.ends_at, c.name as class_name, {TEST_CLOSED.format(tz='$2')} as closed,
                (select count(*) from class_members m where m.class_id = c.id) as members,
                (select count(*) from test_submissions s where s.test_id = t.id) as submitted
         from tests t join classes c on c.id = t.class_id
@@ -1125,7 +1153,7 @@ async def delete_test(conn: asyncpg.Connection, test_id: int, teacher_id: int) -
 
 
 STUDENT_TEST = """
-    select t.id, t.title, t.due, t.questions, coalesce(u.name, 'учитель') as teacher,
+    select t.id, t.title, t.due, t.ends_at, t.questions, coalesce(u.name, 'учитель') as teacher,
            {closed} as closed, s.answers, s.submitted_at
     from tests t
     join class_members m on m.class_id = t.class_id and m.user_id = $1
