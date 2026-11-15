@@ -126,11 +126,19 @@ async def import_progress(
 
 
 @router.post("/grammar/pdf", status_code=status.HTTP_204_NO_CONTENT)
-async def send_pdf(body: schemas.PdfRequest, request: Request, who: Identity = Depends(identity)) -> None:
+async def send_pdf(
+    body: schemas.PdfRequest, request: Request,
+    who: Identity = Depends(identity), user_id: int = Depends(current_user),
+) -> None:
     """Файл собирает и шлёт сервер: токен бота в браузер не попадает,
     а кому слать, известно из подписанного initData."""
     exercises = body.model_dump()["exercises"]
-    document = await run_in_threadpool(pdf.render, who.name or "", exercises)
+    keys = [pdf.item_key(ex["id"], i["n"]) for ex in exercises for i in ex["items"] if i["done"]]
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.first_wrong_attempts(conn, user_id, keys)
+    wrong = {(r["item"], r["slot"]): (r["answer"], r["why"]) for r in rows}
+    summary = pdf.annotate(exercises, wrong)
+    document = await run_in_threadpool(pdf.render, who.name or "", exercises, summary)
     numbers = ", ".join(str(ex["id"]) for ex in exercises)
     response = await request.app.state.telegram.post(
         "/sendDocument",
