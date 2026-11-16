@@ -1,5 +1,6 @@
 """Сборка приложения: единственное место, где слои встречаются."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,6 +32,21 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 MINIAPP_PATH = "/app"
 
 
+TELEGRAM_IDLE = 300  # с — проверено: Telegram не рвёт соединение и через 5 минут
+TELEGRAM_PING = 240  # с — чаще, чем истекает простой
+
+
+async def _keep_warm(client: httpx.AsyncClient) -> None:
+    """getMe сразу и раз в 4 минуты: PDF ученика идёт по уже открытому
+    соединению, а не ждёт DNS + TCP + TLS до api.telegram.org."""
+    while True:
+        try:
+            await client.get("/getMe")
+        except httpx.HTTPError as exc:
+            log.warning("Telegram недоступен: %s", type(exc).__name__)
+        await asyncio.sleep(TELEGRAM_PING)
+
+
 def create_app() -> FastAPI:
     cfg = settings()
     if not cfg.database_url:
@@ -59,15 +75,20 @@ def create_app() -> FastAPI:
         pdf.warm()
         # Одно соединение с Bot API на всё приложение: без него каждый PDF
         # платил за DNS + TCP + TLS до api.telegram.org.
+        # Telegram держит простаивающее соединение 5+ минут, а httpx по
+        # умолчанию бросает его через 5 секунд — и каждый PDF платил ~1–2 с.
         app.state.telegram = httpx.AsyncClient(
-            base_url=f"https://api.telegram.org/bot{cfg.bot_token}", timeout=30
+            base_url=f"https://api.telegram.org/bot{cfg.bot_token}", timeout=30,
+            limits=httpx.Limits(keepalive_expiry=TELEGRAM_IDLE),
         )
+        keeper = asyncio.create_task(_keep_warm(app.state.telegram))
         filler = fill_contrast.start(app.state.pool, cfg) if cfg.deepseek_api_key else None
         try:
             yield
         finally:
             if filler:
                 filler.cancel()
+            keeper.cancel()
             await app.state.telegram.aclose()
             await app.state.pool.close()
 

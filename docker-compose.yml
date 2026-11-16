@@ -19,6 +19,10 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    sysctls:
+      # PDF ученики шлют редко, соединение с Telegram простаивает, и ядро
+      # после простоя сбрасывает окно TCP: 20–40 КБ уходили в несколько кругов.
+      net.ipv4.tcp_slow_start_after_idle: 0
     environment:
       # DSN собирается здесь из POSTGRES_*, чтобы пароль базы не был
       # записан в .env дважды и не разъехался между копиями.

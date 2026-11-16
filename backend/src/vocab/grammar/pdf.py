@@ -66,4 +66,9 @@ def render(student: str, exercises: list[dict[str, Any]], summary: dict[str, Any
             "exercises": exercises, "summary": summary}
     # Компилятор на каждый вызов: render идёт из пула потоков, а общий
     # экземпляр между потоками делить незачем — создание стоит доли мс.
-    return typst.Compiler(TEMPLATE, font_paths=_fonts()).compile(sys_inputs={"data": json.dumps(data)})
+    # Без тегов доступности файл вдвое меньше (21 КБ против 43): после простоя
+    # TCP шлёт с малым окном, и каждые лишние КБ — лишний круг до Telegram.
+    # ReportLab тегов тоже не ставил.
+    return typst.Compiler(TEMPLATE, font_paths=_fonts()).compile(
+        sys_inputs={"data": json.dumps(data)}, pdf_tags=False
+    )

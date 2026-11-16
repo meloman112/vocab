@@ -1,6 +1,7 @@
 """Ручки тетради и учителя. Ответ ученика проверяет мини-апп: движок с
 ключами живёт там, сюда приходит уже итог задания и его ошибки."""
 
+import logging
 import secrets
 import time
 from collections import defaultdict
@@ -15,6 +16,7 @@ from . import schemas
 from .auth import Identity, admin_user, current_user, identity, teacher_user
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 # Ссылка учителя живёт неделю: передают её не сразу, но вечной ей быть незачем.
 INVITE_TTL_DAYS = 7
@@ -132,19 +134,26 @@ async def send_pdf(
 ) -> None:
     """Файл собирает и шлёт сервер: токен бота в браузер не попадает,
     а кому слать, известно из подписанного initData."""
+    t0 = time.perf_counter()
     exercises = body.model_dump()["exercises"]
     keys = [pdf.item_key(ex["id"], i["n"]) for ex in exercises for i in ex["items"] if i["done"]]
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.first_wrong_attempts(conn, user_id, keys)
     wrong = {(r["item"], r["slot"]): (r["answer"], r["why"]) for r in rows}
     summary = pdf.annotate(exercises, wrong)
+    t1 = time.perf_counter()
     document = await run_in_threadpool(pdf.render, who.name or "", exercises, summary)
+    t2 = time.perf_counter()
     numbers = ", ".join(str(ex["id"]) for ex in exercises)
     response = await request.app.state.telegram.post(
         "/sendDocument",
         data={"chat_id": who.tg_id, "caption": f"Упражнения {numbers}"},
         files={"document": (f"workbook-{time.strftime('%Y-%m-%d')}.pdf", document, "application/pdf")},
     )
+    t3 = time.perf_counter()
+    # Где уходит время, видно в логе: db+annotate / сборка / Telegram.
+    log.info("pdf %d упр., %d КБ: db %.0f мс, render %.0f мс, telegram %.0f мс",
+             len(exercises), len(document) // 1024, (t1 - t0) * 1000, (t2 - t1) * 1000, (t3 - t2) * 1000)
     answer = response.json()
     if not answer.get("ok"):
         # Чаще всего ученик не нажал Start: Telegram не даёт боту писать первым.
