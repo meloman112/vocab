@@ -30,6 +30,9 @@ xpi: ## Собрать расширение в extension/vocab.xpi
 test: ## Тесты backend
 	cd backend && python -m pytest
 
+site: ## Собрать статический сайт в site/dist
+	python3 site/build.py
+
 env-check: ## Все ключи из .env.example есть в .env
 	@python3 scripts/env_check.py
 
@@ -39,4 +42,4 @@ smoke: ## Проверить живой контур
 deploy: ## Выкатить запушенный main на сервер
 	ssh -T $(DEPLOY_HOST) 'cd ~/vocab && git pull --ff-only && docker compose up -d --build'
 
-.PHONY: help up down logs ps psql front xpi test env-check smoke deploy
+.PHONY: help up down logs ps psql front xpi test site env-check smoke deploy
