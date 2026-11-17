@@ -390,16 +390,19 @@ async def internal_reminders(request: Request) -> list[schemas.ReminderTarget]:
     ]
 
 
-@router.get("/internal/digest", response_model=schemas.Digest, dependencies=[Depends(service_only)])
-async def internal_digest(request: Request) -> schemas.Digest:
-    """Сводка тетради за неделю и кому её слать: бот в базу не ходит."""
+@router.get("/internal/digest", response_model=list[schemas.Digest], dependencies=[Depends(service_only)])
+async def internal_digest(request: Request) -> list[schemas.Digest]:
+    """Сводки тетради за неделю, каждому учителю — по его ученикам: бот в базу не ходит."""
+    digests = []
     async with request.app.state.pool.acquire() as conn:
-        data = await repo.digest(conn)
-    return schemas.Digest(
-        students=[dict(r) for r in data["students"]],
-        hard_items=[dict(r) for r in data["hard_items"]],
-        teachers=data["teachers"],
-    )
+        for teacher in await repo.teachers(conn):
+            data = await repo.digest(conn, teacher["user_id"])
+            digests.append(schemas.Digest(
+                students=[dict(r) for r in data["students"]],
+                hard_items=[dict(r) for r in data["hard_items"]],
+                teachers=[teacher["tg_id"]],
+            ))
+    return digests
 
 
 @router.get(

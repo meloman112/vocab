@@ -23,6 +23,7 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 CLASS_PREFIX = "class_"
+MAX_CLASSES = 20
 # Автосдача в мини-аппе, когда время вышло, идёт по сети и приходит чуть позже конца.
 SUBMIT_GRACE = timedelta(seconds=20)
 
@@ -66,10 +67,13 @@ async def get_classes(request: Request, teacher_id: int = Depends(teacher_user))
 
 @router.post("/teacher/classes", response_model=schemas.ClassOut)
 async def post_class(
-    body: schemas.ClassIn, request: Request, teacher_id: int = Depends(teacher_user)
+    body: schemas.ClassIn, request: Request, user_id: int = Depends(current_user)
 ) -> schemas.ClassOut:
+    """Открыта всем: первый же класс делает пользователя учителем."""
     async with request.app.state.pool.acquire() as conn:
-        row = await repo.create_class(conn, teacher_id, body.name.strip(), secrets.token_urlsafe(9))
+        if len(await repo.teacher_classes(conn, user_id)) >= MAX_CLASSES:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"у учителя не больше {MAX_CLASSES} классов")
+        row = await repo.create_class(conn, user_id, body.name.strip(), secrets.token_urlsafe(9))
     return schemas.ClassOut(**dict(row), link=await _class_link(row["code"]))
 
 

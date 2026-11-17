@@ -2,7 +2,6 @@
 ключами живёт там, сюда приходит уже итог задания и его ошибки."""
 
 import logging
-import secrets
 import time
 from collections import defaultdict
 
@@ -13,13 +12,11 @@ from .. import enrich, grammar, repo
 from ..config import settings
 from ..grammar import pdf
 from . import schemas
-from .auth import Identity, admin_user, current_user, identity, teacher_user
+from .auth import Identity, Teacher, admin_user, current_user, identity, teacher
 
 router = APIRouter()
 log = logging.getLogger(__name__)
 
-# Ссылка учителя живёт неделю: передают её не сразу, но вечной ей быть незачем.
-INVITE_TTL_DAYS = 7
 COMMON_MISTAKES = 30
 DRILL_VERBS = 40
 
@@ -50,7 +47,7 @@ async def get_progress(
 ) -> schemas.GrammarProgress:
     async with request.app.state.pool.acquire() as conn:
         rows = await repo.grammar_results(conn, user_id)
-        accepted_rows = await repo.grammar_accepted(conn)
+        accepted_rows = await repo.grammar_accepted(conn, user_id)
     accepted: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
     for r in accepted_rows:
         accepted[r["item"]][r["slot"]].append(r["answer"])
@@ -92,7 +89,7 @@ async def recheck(
     body: schemas.Recheck, request: Request, _: int = Depends(current_user)
 ) -> schemas.RecheckOut:
     """Ученик считает, что движок зря не принял ответ. Если ИИ согласен,
-    ответ засчитывается всем — как ответ, принятый учителем."""
+    ответ засчитывается всем — как ответ, принятый админом."""
     item = _known(body.item)
     if body.slot >= item.slots:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "нет такого пропуска")
@@ -163,20 +160,21 @@ async def send_pdf(
 # --- учитель -------------------------------------------------------------------
 
 
-@router.get("/teacher/students", response_model=list[schemas.Student],
-            dependencies=[Depends(teacher_user)])
-async def get_students(request: Request) -> list[schemas.Student]:
+@router.get("/teacher/students", response_model=list[schemas.Student])
+async def get_students(request: Request, who: Teacher = Depends(teacher)) -> list[schemas.Student]:
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.students(conn)
+        rows = await repo.students(conn, who.scope)
     return [schemas.Student(**dict(r)) for r in rows]
 
 
-@router.get("/teacher/students/{user_id}", response_model=schemas.StudentDetail,
-            dependencies=[Depends(teacher_user)])
-async def get_student(user_id: int, request: Request) -> schemas.StudentDetail:
+@router.get("/teacher/students/{user_id}", response_model=schemas.StudentDetail)
+async def get_student(
+    user_id: int, request: Request, viewer: Teacher = Depends(teacher)
+) -> schemas.StudentDetail:
     async with request.app.state.pool.acquire() as conn:
         who = await repo.student(conn, user_id)
-        if who is None:
+        # Чужой ученик неотличим от несуществующего: по id их не перебрать.
+        if who is None or not await repo.teaches(conn, viewer.scope, user_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого ученика")
         results = await repo.student_results(conn, user_id)
         mistakes = await repo.student_mistakes(conn, user_id)
@@ -189,41 +187,23 @@ async def get_student(user_id: int, request: Request) -> schemas.StudentDetail:
 
 @router.post("/teacher/mistakes/{mistake_id}/accept", status_code=status.HTTP_204_NO_CONTENT)
 async def accept_mistake(
-    mistake_id: int, request: Request, teacher_id: int = Depends(teacher_user)
+    mistake_id: int, request: Request, who: Teacher = Depends(teacher)
 ) -> None:
     async with request.app.state.pool.acquire() as conn:
-        if await repo.accept_mistake(conn, mistake_id, teacher_id) is None:
+        if await repo.accept_mistake(conn, mistake_id, who.user_id, who.scope) is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такой ошибки")
 
 
-@router.get("/teacher/mistakes/common", response_model=list[schemas.CommonMistake],
-            dependencies=[Depends(teacher_user)])
-async def get_common_mistakes(request: Request) -> list[schemas.CommonMistake]:
+@router.get("/teacher/mistakes/common", response_model=list[schemas.CommonMistake])
+async def get_common_mistakes(
+    request: Request, who: Teacher = Depends(teacher)
+) -> list[schemas.CommonMistake]:
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.common_mistakes(conn, COMMON_MISTAKES)
+        rows = await repo.common_mistakes(conn, COMMON_MISTAKES, who.scope)
     return [schemas.CommonMistake(**dict(r)) for r in rows]
 
 
-# --- назначение учителей -------------------------------------------------------
-
-
-@router.post("/admin/teacher-invites", response_model=schemas.Invite)
-async def create_invite(request: Request, admin_id: int = Depends(admin_user)) -> schemas.Invite:
-    code = secrets.token_urlsafe(12)
-    async with request.app.state.pool.acquire() as conn:
-        await repo.create_teacher_invite(conn, admin_id, code)
-    return schemas.Invite(code=code, ttl_days=INVITE_TTL_DAYS)
-
-
-@router.post("/teacher-invites/{code}/redeem", response_model=schemas.Redeemed)
-async def redeem_invite(
-    code: str, request: Request, user_id: int = Depends(current_user)
-) -> schemas.Redeemed:
-    async with request.app.state.pool.acquire() as conn:
-        row = await repo.redeem_teacher_invite(conn, code, user_id, INVITE_TTL_DAYS)
-    if row is None:
-        raise HTTPException(status.HTTP_410_GONE, "ссылка уже использована или устарела")
-    return schemas.Redeemed(inviter_tg_id=row["inviter_tg_id"])
+# --- учителя для админа --------------------------------------------------------
 
 
 @router.get("/admin/teachers", response_model=list[schemas.Teacher],

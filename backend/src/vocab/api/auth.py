@@ -88,8 +88,8 @@ async def identity(
         return Identity(tg_id, name or None)
     if x_token:
         # Имя от бота: Telegram сам подставляет его в сообщение, а без него
-        # учитель, назначенный ссылкой, был бы в списке «Без имени», пока не
-        # откроет мини-апп. Заголовок принимается только вместе с токеном.
+        # учитель, создавший класс через /bind, был бы в списке «Без имени», пока
+        # не откроет мини-апп. Заголовок принимается только вместе с токеном.
         name = unquote(x_tg_name)[:64] if x_tg_name and x_tg_id else None
         return Identity(_tg_id_from_token(cfg, x_token, x_tg_id), name or None)
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "нужен X-Init-Data или X-Token")
@@ -123,15 +123,27 @@ async def admin_user(request: Request, who: Identity = Depends(identity)) -> int
     return await current_user(request, who)
 
 
-async def teacher_user(request: Request, who: Identity = Depends(identity)) -> int:
+@dataclass(frozen=True)
+class Teacher:
+    user_id: int
+    # Чьих учеников он видит и кому засчитывает ответы: своих классов.
+    # None — всех: это админ.
+    scope: int | None
+
+
+async def teacher(request: Request, who: Identity = Depends(identity)) -> Teacher:
     """Учитель или админ: видит ошибки учеников тетради."""
     user_id = await current_user(request, who)
     if settings().is_admin(who.tg_id):
-        return user_id
+        return Teacher(user_id, None)
     async with request.app.state.pool.acquire() as conn:
         if not await repo.is_teacher(conn, user_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "только для учителей")
-    return user_id
+    return Teacher(user_id, user_id)
+
+
+async def teacher_user(who: Teacher = Depends(teacher)) -> int:
+    return who.user_id
 
 
 async def service_only(

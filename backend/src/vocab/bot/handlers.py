@@ -13,12 +13,14 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    User,
     WebAppInfo,
 )
 
 from ..client import VocabAPI
 from ..config import Settings
 from . import chat
+from .teachers import TEACHING, teaching_keyboard
 from .widget import Widgets
 
 log = logging.getLogger(__name__)
@@ -108,8 +110,29 @@ async def add_and_reply(
                            fallback=(chat.card_text(entry), keyboard))
 
 
+def role_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🎓 Я учусь", callback_data="role:learn"),
+        InlineKeyboardButton(text="👩‍🏫 Я преподаю", callback_data="role:teach"),
+    ]])
+
+
+async def is_new(api: VocabAPI, user: User) -> bool:
+    """Новичок — у кого нет ни слов, ни заданий тетради. Отдельного флага в базе нет."""
+    stats = await api.stats(user.id)
+    me = await api.me(user.id, user.full_name)
+    return not stats["total"] and not me["grammar_done"]
+
+
 @router.message(Command("start"))
 async def start(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets) -> None:
+    if await is_new(api, message.from_user):
+        await message.answer(
+            "Привет! Я помогаю с английским: тетрадь по грамматике с разбором ошибок "
+            "и слова с повторением.\n\nТы учишься или преподаёшь?",
+            reply_markup=role_keyboard(),
+        )
+        return
     await message.answer(
         "Привет! Здесь два раздела.\n\n"
         "📒 Тетрадь — 134 упражнения по грамматике из Work book: времена, Passive, "
@@ -121,10 +144,56 @@ async def start(message: Message, api: VocabAPI, cfg: Settings, widgets: Widgets
         "Из фразы или предложения достану устойчивые выражения.\n\n"
         "Прямо в чате: ⚡ разминка каждые пару часов, 🎯 /quiz — тест, "
         "🔁 /verbs — неправильные глаголы на скорость, 📊 /stats — табло (закреплено сверху).\n\n"
-        "/grammar — тетрадь\n/review — повторение в приложении\n"
-        "/top — что учат чаще всего\n/rating — рейтинг недели",
+        "/help — все команды",
     )
     await chat.send_board(widgets, api, cfg, message.chat.id)
+
+
+@router.callback_query(F.data == "role:learn")
+async def role_learn(callback: CallbackQuery, cfg: Settings) -> None:
+    await callback.answer()
+    await callback.message.answer(
+        "🎓 Пришли любое английское слово — отвечу переводом и примерами и добавлю в повторение.\n"
+        "Тетрадь по грамматике и тесты учителя — в приложении.\n"
+        "/help — всё, что я умею.",
+        reply_markup=chat.app_keyboard(cfg),
+    )
+
+
+@router.callback_query(F.data == "role:teach")
+async def role_teach(callback: CallbackQuery, cfg: Settings) -> None:
+    await callback.answer()
+    await callback.message.answer(TEACHING, reply_markup=teaching_keyboard(cfg))
+
+
+HELP = (
+    "Пришли английское слово или фразу — переведу и добавлю в повторение.\n\n"
+    "/grammar — тетрадь по грамматике\n"
+    "/review — повторение слов в приложении\n"
+    "/stats — табло: цифры и кнопки\n"
+    "/warmup — разминка: 5 слов в чате\n"
+    "/quiz — тест по словам\n"
+    "/verbs — неправильные глаголы на скорость\n"
+    "/rating — рейтинг недели\n"
+    "/top — что учат чаще всего"
+)
+HELP_TEACHER = (
+    "Учителю:\n"
+    "/test — контрольная на уроке: текст после команды или файл .docx\n"
+    "/students — сводка по ученикам\n"
+    "В группе класса: /bind, /dz, /report, /helper"
+)
+HELP_ADMIN = "Админу:\n/teacher — учителя\n/ban слово — убрать из словаря (владельцу)"
+
+
+@router.message(Command("help"))
+async def help_(message: Message, api: VocabAPI, cfg: Settings) -> None:
+    user = message.from_user
+    me = await api.me(user.id, user.full_name)
+    parts = [HELP, HELP_TEACHER if me["is_teacher"] else "/teacher — как вести свой класс"]
+    if cfg.is_admin(user.id):
+        parts.append(HELP_ADMIN)
+    await message.answer("\n\n".join(parts))
 
 
 @router.message(Command("review"))

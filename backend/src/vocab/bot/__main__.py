@@ -20,17 +20,10 @@ from .teachers import router as teachers_router
 
 log = logging.getLogger(__name__)
 
-# Подсказки в меню «/». Учительские и админские команды сюда не входят:
-# ученику они ни к чему, а нужные люди о них знают.
+# Меню «/» короткое: остальные команды работают, а перечисляет их /help.
 COMMANDS = [
-    BotCommand(command="grammar", description="📒 Тетрадь по грамматике"),
-    BotCommand(command="review", description="🧠 Повторение слов и тесты"),
-    BotCommand(command="stats", description="📊 Табло: цифры и кнопки"),
-    BotCommand(command="warmup", description="⚡ Разминка: 5 слов в чате"),
-    BotCommand(command="quiz", description="🎯 Тест по словам в чате"),
-    BotCommand(command="verbs", description="🔁 Неправильные глаголы на скорость"),
-    BotCommand(command="rating", description="Рейтинг недели"),
-    BotCommand(command="top", description="Что учат чаще всего"),
+    BotCommand(command="start", description="Начать"),
+    BotCommand(command="help", description="Что умеет бот"),
 ]
 
 GROUP_COMMANDS = [

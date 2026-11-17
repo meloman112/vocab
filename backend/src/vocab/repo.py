@@ -740,15 +740,29 @@ async def grammar_results(conn: asyncpg.Connection, user_id: int) -> list[asyncp
     )
 
 
-async def grammar_accepted(conn: asyncpg.Connection) -> list[asyncpg.Record]:
-    """Ответы, засчитанные учителями: движок мини-аппа принимает их наравне с ключом."""
-    return await conn.fetch("select item, slot, answer from grammar_accepted")
+async def grammar_accepted(conn: asyncpg.Connection, user_id: int) -> list[asyncpg.Record]:
+    """Засчитанные ответы: движок мини-аппа принимает их наравне с ключом.
+    Общие — всем, ответы учителя — ему самому и ученикам его классов."""
+    return await conn.fetch(
+        """
+        select distinct item, slot, answer from grammar_accepted
+        where teacher_id is null or teacher_id = $1 or teacher_id in (
+          select c.teacher_id from class_members m join classes c on c.id = m.class_id
+          where m.user_id = $1
+        )
+        """,
+        user_id,
+    )
+
+
+# Ключ строки — уникальный индекс из миграции 016, а не primary key.
+ACCEPTED_TWICE = "on conflict (item, slot, answer, coalesce(teacher_id, 0)) do nothing"
 
 
 async def accept_answer(conn: asyncpg.Connection, item: str, slot: int, answer: str) -> None:
     """Ответ засчитал ИИ: added_by пуст, учитель отличит его от своих."""
     await conn.execute(
-        "insert into grammar_accepted (item, slot, answer) values ($1, $2, $3) on conflict do nothing",
+        f"insert into grammar_accepted (item, slot, answer) values ($1, $2, $3) {ACCEPTED_TWICE}",
         item, slot, answer,
     )
 
@@ -844,37 +858,22 @@ async def remove_teacher(conn: asyncpg.Connection, user_id: int) -> bool:
     return status != "UPDATE 0"
 
 
-async def create_teacher_invite(conn: asyncpg.Connection, user_id: int, code: str) -> None:
-    await conn.execute(
-        "insert into teacher_invites (code, created_by) values ($1, $2)", code, user_id
-    )
+def _taught(user: str, param: int) -> str:
+    """Условие «{user} — ученик учителя ${param}», то есть участник его класса.
+    Параметр пуст — смотрит админ, и условие пропускает всех."""
+    return (f"(${param}::bigint is null or {user} in (select m.user_id from class_members m"
+            f" join classes c on c.id = m.class_id where c.teacher_id = ${param}))")
 
 
-async def redeem_teacher_invite(
-    conn: asyncpg.Connection, code: str, user_id: int, ttl_days: int
-) -> asyncpg.Record | None:
-    """Гасит приглашение и делает учителем. None — ссылки нет, она занята или
-    просрочена. Возвращает tg_id того, кто приглашал: бот ему сообщит."""
-    async with conn.transaction():
-        row = await conn.fetchrow(
-            """
-            update teacher_invites set used_by = $2, used_at = now()
-            where code = $1 and used_by is null
-              and created_at > now() - make_interval(days => $3)
-            returning (select tg_id from users where id = created_by) as inviter_tg_id
-            """,
-            code, user_id, ttl_days,
-        )
-        if row is not None:
-            await conn.execute("update users set is_teacher = true where id = $1", user_id)
-    return row
+async def teaches(conn: asyncpg.Connection, teacher_id: int | None, user_id: int) -> bool:
+    return await conn.fetchval(f"select {_taught('$2::bigint', 1)}", teacher_id, user_id)
 
 
-async def students(conn: asyncpg.Connection) -> list[asyncpg.Record]:
-    """Все, кто делал тетрадь, со сводкой. Неразобранные ошибки — те, что
-    учитель ещё не засчитал, — вверху: с них учитель и начинает."""
+async def students(conn: asyncpg.Connection, teacher_id: int | None) -> list[asyncpg.Record]:
+    """Ученики учителя, делавшие тетрадь, со сводкой. Неразобранные ошибки — те,
+    что учитель ещё не засчитал, — вверху: с них учитель и начинает."""
     return await conn.fetch(
-        """
+        f"""
         with r as (
           select user_id, count(*) as done,
                  count(*) filter (where clean and not was_wrong) as first_try,
@@ -894,8 +893,10 @@ async def students(conn: asyncpg.Connection) -> list[asyncpg.Record]:
                r.last_at
         from r join users u on u.id = r.user_id
         left join m on m.user_id = r.user_id
+        where {_taught('u.id', 1)}
         order by r.last_at desc nulls last
-        """
+        """,
+        teacher_id,
     )
 
 
@@ -923,65 +924,68 @@ async def student_mistakes(conn: asyncpg.Connection, user_id: int) -> list[async
 
 
 async def accept_mistake(
-    conn: asyncpg.Connection, mistake_id: int, teacher_id: int
+    conn: asyncpg.Connection, mistake_id: int, teacher_id: int, scope: int | None
 ) -> asyncpg.Record | None:
-    """Ответ ученика верный, ключ его не знал. Ответ становится принятым
-    у всех, а у этого ученика задание перестаёт считаться ошибкой, если
-    неразобранных ошибок в нём больше нет."""
+    """Ответ ученика верный, ключ его не знал. scope — у чьих учеников ответ
+    становится принятым: у учеников учителя или, если пуст (засчитал админ),
+    у всех. У них же задание перестаёт считаться ошибкой, если неразобранных
+    ошибок в нём больше нет. None — ошибки нет или ученик чужой."""
     async with conn.transaction():
         row = await conn.fetchrow(
-            "update grammar_mistakes set accepted_by = $2 where id = $1"
+            f"update grammar_mistakes set accepted_by = $2 where id = $1 and {_taught('user_id', 3)}"
             " returning user_id, item, slot, answer",
-            mistake_id, teacher_id,
+            mistake_id, teacher_id, scope,
         )
         if row is None:
             return None
         await conn.execute(
-            "insert into grammar_accepted (item, slot, answer, added_by) values ($1, $2, $3, $4)"
-            " on conflict do nothing",
-            row["item"], row["slot"], row["answer"].strip(), teacher_id,
+            "insert into grammar_accepted (item, slot, answer, added_by, teacher_id)"
+            f" values ($1, $2, $3, $4, $5) {ACCEPTED_TWICE}",
+            row["item"], row["slot"], row["answer"].strip(), teacher_id, scope,
         )
         # Та же ошибка у других учеников тоже засчитывается: ответ теперь верный.
         await conn.execute(
             "update grammar_mistakes set accepted_by = $4"
             " where item = $1 and slot = $2 and lower(trim(answer)) = lower(trim($3))"
-            " and accepted_by is null",
-            row["item"], row["slot"], row["answer"], teacher_id,
+            f" and accepted_by is null and {_taught('user_id', 5)}",
+            row["item"], row["slot"], row["answer"], teacher_id, scope,
         )
         await conn.execute(
-            """
+            f"""
             update grammar_results g set clean = true
-            where g.item = $1 and not g.clean and not exists (
+            where g.item = $1 and not g.clean and {_taught('g.user_id', 2)} and not exists (
               select 1 from grammar_mistakes m
               where m.user_id = g.user_id and m.item = g.item and m.accepted_by is null
             )
             """,
-            row["item"],
+            row["item"], scope,
         )
     return row
 
 
-async def common_mistakes(conn: asyncpg.Connection, limit: int) -> list[asyncpg.Record]:
+async def common_mistakes(
+    conn: asyncpg.Connection, limit: int, teacher_id: int | None
+) -> list[asyncpg.Record]:
     """Где ошибаются чаще всего — по числу учеников, а не попыток: один
     упрямый ученик не должен заслонять задание, на котором сыплется класс."""
     return await conn.fetch(
-        """
+        f"""
         select item, count(distinct user_id) as students, count(*) as attempts,
                (array_agg(answer order by created_at desc))[1:5] as answers
-        from grammar_mistakes where accepted_by is null
+        from grammar_mistakes where accepted_by is null and {_taught('user_id', 2)}
         group by item
         order by students desc, attempts desc
         limit $1
         """,
-        limit,
+        limit, teacher_id,
     )
 
 
-async def digest(conn: asyncpg.Connection) -> dict:
-    """Сводка тетради за неделю для учителя: кто занимался, на чём ошибается
-    и какие задания не даются сразу нескольким ученикам."""
+async def digest(conn: asyncpg.Connection, teacher_id: int) -> dict:
+    """Сводка тетради за неделю для учителя: кто из его учеников занимался, на чём
+    ошибается и какие задания не даются сразу нескольким."""
     students = await conn.fetch(
-        """
+        f"""
         with r as (
           select user_id, count(*) as done,
                  count(*) filter (where clean and not was_wrong) as first_try
@@ -999,25 +1003,25 @@ async def digest(conn: asyncpg.Connection) -> dict:
                top.kind as top_mistake, top.n as top_count
         from r join users u on u.id = r.user_id
         left join top on top.user_id = r.user_id
+        where {_taught('u.id', 1)}
         order by r.done desc, name
-        """
+        """,
+        teacher_id,
     )
     hard_items = await conn.fetch(
-        """
+        f"""
         select item, count(distinct user_id) as students
         from grammar_mistakes
         where accepted_by is null and created_at > now() - interval '7 days'
+          and {_taught('user_id', 1)}
         group by item
         having count(distinct user_id) >= 2
         order by students desc, item
         limit 3
-        """
+        """,
+        teacher_id,
     )
-    teachers = await conn.fetch("select tg_id from users where is_teacher")
-    return {
-        "students": students, "hard_items": hard_items,
-        "teachers": [t["tg_id"] for t in teachers],
-    }
+    return {"students": students, "hard_items": hard_items}
 
 
 async def grammar_summary(conn: asyncpg.Connection, user_id: int) -> asyncpg.Record:
@@ -1041,11 +1045,14 @@ TEST_CLOSED = (
 async def create_class(
     conn: asyncpg.Connection, teacher_id: int, name: str, code: str
 ) -> asyncpg.Record:
-    return await conn.fetchrow(
-        "insert into classes (teacher_id, name, code) values ($1, $2, $3)"
-        " returning id, name, code, 0::bigint as members",
-        teacher_id, name, code,
-    )
+    """Кто создал класс, тот учитель: назначать его некому."""
+    async with conn.transaction():
+        await conn.execute("update users set is_teacher = true where id = $1", teacher_id)
+        return await conn.fetchrow(
+            "insert into classes (teacher_id, name, code) values ($1, $2, $3)"
+            " returning id, name, code, 0::bigint as members",
+            teacher_id, name, code,
+        )
 
 
 async def teacher_classes(conn: asyncpg.Connection, teacher_id: int) -> list[asyncpg.Record]:

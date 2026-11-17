@@ -113,16 +113,16 @@ def digest_text(digest: dict[str, Any]) -> str | None:
 
 
 async def send_digest(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
-    digest = await api.digest()
-    text = digest_text(digest)
-    if text is None:
-        return
     markup = InlineKeyboardMarkup(inline_keyboard=[[chat.app_button(cfg, "👥 Ученики", "teacher")]])
-    for tg_id in digest["teachers"]:
-        try:
-            await bot.send_message(tg_id, text, reply_markup=markup)
-        except Exception as exc:  # noqa: BLE001 — как в notify: остальным учителям сводка дойти должна
-            log.warning("не отправил сводку %s: %s", tg_id, exc)
+    for digest in await api.digest():
+        text = digest_text(digest)
+        if text is None:
+            continue
+        for tg_id in digest["teachers"]:
+            try:
+                await bot.send_message(tg_id, text, reply_markup=markup)
+            except Exception as exc:  # noqa: BLE001 — как в notify: остальным учителям сводка дойти должна
+                log.warning("не отправил сводку %s: %s", tg_id, exc)
 
 
 async def keep_warm(bot: Bot, widgets: Widgets) -> None:

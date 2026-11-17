@@ -91,7 +91,7 @@ class VocabAPI:
     async def reminder_targets(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/reminders")
 
-    async def digest(self) -> dict[str, Any]:
+    async def digest(self) -> list[dict[str, Any]]:
         return await self._call("GET", "/internal/digest")
 
     async def ban(self, word: str) -> None:
@@ -99,12 +99,6 @@ class VocabAPI:
 
     async def me(self, tg_id: int, tg_name: str | None = None) -> dict[str, Any]:
         return await self._call("GET", "/me", tg_id, tg_name)
-
-    async def create_teacher_invite(self, tg_id: int) -> dict[str, Any]:
-        return await self._call("POST", "/admin/teacher-invites", tg_id)
-
-    async def redeem_teacher_invite(self, tg_id: int, tg_name: str, code: str) -> dict[str, Any]:
-        return await self._call("POST", f"/teacher-invites/{code}/redeem", tg_id, tg_name)
 
     async def teachers(self, tg_id: int) -> list[dict[str, Any]]:
         return await self._call("GET", "/admin/teachers", tg_id)
