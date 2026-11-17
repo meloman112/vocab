@@ -1159,7 +1159,7 @@ async def teacher_test(
     conn: asyncpg.Connection, test_id: int, teacher_id: int, tz: str
 ) -> asyncpg.Record | None:
     return await conn.fetchrow(
-        f"select t.id, t.title, t.due, t.questions, c.name as class_name,"
+        f"select t.id, t.title, t.due, t.ends_at, t.questions, c.name as class_name,"
         f" {TEST_CLOSED.format(tz='$3')} as closed"
         " from tests t join classes c on c.id = t.class_id where t.id = $1 and c.teacher_id = $2",
         test_id, teacher_id, tz,

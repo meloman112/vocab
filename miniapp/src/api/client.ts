@@ -130,6 +130,10 @@ export const api = {
     },
     createTest: (test: { title: string; class_id: number; due: string; text: string }) =>
       send<{ id: number; sent: number }>('POST', '/teacher/tests', test),
+    /** Контрольная на уроке: время пошло сразу. */
+    startLesson: (test: { title: string; class_id: number; minutes: number; text: string }) =>
+      send<{ id: number; sent: number }>('POST', '/teacher/tests/live', test),
+    finishTest: (id: number) => send<void>('POST', `/teacher/tests/${id}/finish`),
     acceptAnswer: (testId: number, gap: number, answer: string) =>
       send<void>('POST', `/teacher/tests/${testId}/accept`, { gap, answer }),
     deleteTest: (id: number) => send<void>('DELETE', `/teacher/tests/${id}`),

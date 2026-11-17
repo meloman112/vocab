@@ -561,7 +561,7 @@
   right: 0;
   bottom: 0;
   z-index: 20;
-  padding: 20px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 20px 16px calc(14px + max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)));
   background: linear-gradient(transparent, var(--tg-theme-secondary-bg-color, #f0f0f0) 35%);
 }
 

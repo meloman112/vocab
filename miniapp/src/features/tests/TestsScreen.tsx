@@ -1,10 +1,10 @@
 import { Badge, Button, Caption, Cell, List, Placeholder, Section, Spinner, Text, Title } from '@telegram-apps/telegram-ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../../api/client';
 import type { StudentTest } from '../../api/types';
 import { notify, useBackButton } from '../../lib/telegram';
-import { firstGaps, QuestionText } from './QuestionText';
+import { firstGaps, isGap, QuestionText } from './QuestionText';
 import '../grammar/grammar.css';
 import './tests.css';
 
@@ -98,13 +98,12 @@ function readDraft(id: number, total: number): string[] {
 
 function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () => void }) {
   const [values, setValues] = useState(() => test.answers ?? readDraft(test.id, test.total));
-  const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const endsAt = test.ends_at ? Date.parse(test.ends_at) : null;
   const [left, setLeft] = useState(endsAt === null ? null : endsAt - Date.now());
   const autoSent = useRef(false);
-  const firsts = firstGaps(test.questions);
+  const warned = useRef(false);
   const running = !test.submitted_at && !test.closed;
 
   useEffect(() => {
@@ -114,7 +113,6 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
   function change(gap: number, value: string) {
     const next = values.map((v, i) => (i === gap ? value : v));
     setValues(next);
-    setConfirm(false);
     try {
       localStorage.setItem(DRAFT(test.id), JSON.stringify(next));
     } catch {
@@ -124,7 +122,12 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
 
   // Время вышло: пустое тоже сдаём, а потом перечитываем тест — откроются балл и ключ.
   useEffect(() => {
-    if (left === null || left > 0 || test.closed) return;
+    if (left === null || test.closed) return;
+    if (left <= 60_000 && left > 0 && running && !warned.current) {
+      warned.current = true;
+      notify('warning');
+    }
+    if (left > 0) return;
     if (!running) return onSubmitted();
     if (autoSent.current) return;
     autoSent.current = true;
@@ -136,11 +139,6 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
     const timer = setInterval(() => setLeft(endsAt - Date.now()), 1000);
     return () => clearInterval(timer);
   }, [endsAt, test.closed]);
-
-  function submit() {
-    if (!confirm) return setConfirm(true);
-    return send();
-  }
 
   async function send() {
     setBusy(true);
@@ -160,14 +158,27 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
     }
   }
 
-  const empty = values.filter((v) => !v.trim()).length;
   return (
     <div className="screen t-run">
-      {running && left !== null && <div className="t-timer">Осталось {minutesLeft(left)}</div>}
+      {running && left !== null && (
+        <div className={`t-timer${left <= 60_000 ? ' t-timer--end' : ''}`}>⏱ Осталось {minutesLeft(left)}</div>
+      )}
       <header className="t-head">
         <Title level="2" weight="1">{test.title}</Title>
         <Caption className="hint">{test.teacher} · {test.ends_at ? deadline(test) : `до ${dayMonth(test.due)} включительно`} · одна попытка</Caption>
       </header>
+      {error && <div className="g-fb bad">{error}</div>}
+      {running
+        ? <Stepper test={test} values={values} onChange={change} busy={busy} onSend={send} />
+        : <Results test={test} values={values} />}
+    </div>
+  );
+}
+
+function Results({ test, values }: { test: StudentTest; values: string[] }) {
+  const firsts = firstGaps(test.questions);
+  return (
+    <>
       {test.score !== null && (
         <div className="g-result"><div className="g-big">{test.score} / {test.total}</div><Text className="hint">верных ответов</Text></div>
       )}
@@ -176,24 +187,82 @@ function TestView({ test, onSubmitted }: { test: StudentTest; onSubmitted: () =>
       )}
       {!test.submitted_at && test.closed && <div className="g-fb bad">Срок прошёл, тест не сдан.</div>}
       <section className="g-sheet">
-        {running && <p className="g-task">Впиши ответы. Можно сокращённо или полностью: don't и do not — одно и то же.</p>}
         {test.questions.map((q, i) => (
           <div key={i} className="g-sent">
             <span className="g-num">{i + 1}.</span>
-            <QuestionText question={q} first={firsts[i]!} values={values}
-              onChange={running ? change : undefined} marks={running ? undefined : test.marks ?? undefined} />
+            <QuestionText question={q} first={firsts[i]!} values={values} marks={test.marks ?? undefined} />
           </div>
         ))}
       </section>
-      {error && <div className="g-fb bad">{error}</div>}
-      {running && (
-        <div className="g-bottom">
-          {confirm && <Caption className="t-confirm">{empty ? `Пустых ответов: ${empty}. ` : ''}Сдать? Изменить ответы потом будет нельзя.</Caption>}
-          <Button size="l" stretched mode="filled" className="g-go" loading={busy} onClick={submit}>
-            {confirm ? 'Да, сдать' : 'Сдать тест'}
-          </Button>
-        </div>
+    </>
+  );
+}
+
+interface StepperProps {
+  test: StudentTest;
+  values: string[];
+  onChange: (gap: number, value: string) => void;
+  busy: boolean;
+  onSend: () => void;
+}
+
+/** Вопрос за вопросом; после последнего — сводка, где видно пустые. */
+function Stepper({ test, values, onChange, busy, onSend }: StepperProps) {
+  const count = test.questions.length;
+  const [at, setAt] = useState(0);
+  const sheet = useRef<HTMLElement>(null);
+  const firsts = firstGaps(test.questions);
+  const gapsOf = (i: number) => test.questions[i]!.parts.filter(isGap).length;
+  const filled = (i: number) => values.slice(firsts[i], firsts[i]! + gapsOf(i)).every((v) => v.trim());
+  const empty = test.questions.map((_, i) => i).filter((i) => !filled(i));
+  const review = at === count;
+
+  // Новый вопрос — курсор сразу в первый пропуск, клавиатура уже открыта.
+  useEffect(() => {
+    sheet.current?.querySelector('input')?.focus();
+  }, [at]);
+
+  function nextOnEnter(e: KeyboardEvent) {
+    if (e.key !== 'Enter') return;
+    const inputs = Array.from(sheet.current?.querySelectorAll('input') ?? []);
+    const i = inputs.indexOf(e.target as HTMLInputElement);
+    if (i >= 0 && i < inputs.length - 1) return inputs[i + 1]!.focus();
+    setAt(at + 1);
+  }
+
+  return (
+    <>
+      <div className="t-dots">
+        {test.questions.map((_, i) => (
+          <button key={i} type="button" onClick={() => setAt(i)}
+            className={`t-dot${i === at ? ' on' : ''}${filled(i) ? ' done' : ''}`}>{i + 1}</button>
+        ))}
+        <button type="button" onClick={() => setAt(count)} className={`t-dot t-dot--end${review ? ' on' : ''}`}>✓</button>
+      </div>
+
+      {review ? (
+        <section className="g-sheet t-review">
+          <Text weight="2">Заполнено {count - empty.length} из {count}</Text>
+          {empty.length > 0
+            ? <Caption className="hint">Пустые: {empty.map((i) => i + 1).join(', ')} — нажми номер сверху, чтобы вернуться. Пустой ответ засчитается как неверный.</Caption>
+            : <Caption className="hint">Все вопросы заполнены. Изменить ответы после сдачи нельзя.</Caption>}
+        </section>
+      ) : (
+        <section className="g-sheet t-one" ref={sheet} onKeyDown={nextOnEnter}>
+          <Caption className="hint">Вопрос {at + 1} из {count}</Caption>
+          <div className="g-sent">
+            <QuestionText question={test.questions[at]!} first={firsts[at]!} values={values} onChange={onChange} />
+          </div>
+          <Caption className="hint">Можно сокращённо или полностью: don't = do not.</Caption>
+        </section>
       )}
-    </div>
+
+      <div className="g-bottom t-nav">
+        <Button size="l" mode="bezeled" disabled={at === 0} onClick={() => setAt(at - 1)}>←</Button>
+        {review
+          ? <Button size="l" stretched mode="filled" loading={busy} onClick={onSend}>Сдать тест</Button>
+          : <Button size="l" stretched mode="filled" onClick={() => setAt(at + 1)}>{at === count - 1 ? 'К сдаче' : 'Дальше →'}</Button>}
+      </div>
+    </>
   );
 }

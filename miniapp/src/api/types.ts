@@ -369,6 +369,7 @@ export interface TestReport {
   id: number;
   title: string;
   due: string;
+  ends_at: string | null;
   class_name: string;
   closed: boolean;
   questions: Question[];

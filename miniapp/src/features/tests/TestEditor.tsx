@@ -1,12 +1,23 @@
-import { Button, Caption, Cell, Input, List, Placeholder, Section, Select, Spinner, Textarea } from '@telegram-apps/telegram-ui';
+import { Button, Caption, Cell, Input, List, Placeholder, Section, SegmentedControl, Select, Spinner, Textarea } from '@telegram-apps/telegram-ui';
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api/client';
 import type { ConvertedLine, SchoolClass, TestPreview } from '../../api/types';
 import { notify } from '../../lib/telegram';
 import { firstGaps, QuestionText } from './QuestionText';
+import { dayMonth } from './TestsScreen';
 
 const EXAMPLE = "She [doesn't like] (not like) coffee.\nI [have lived|have been living] (live) here for five years.";
+
+type Mode = 'home' | 'lesson';
+
+const DUE_PRESETS = [
+  { days: 0, label: 'Сегодня' },
+  { days: 1, label: 'Завтра' },
+  { days: 3, label: '3 дня' },
+  { days: 7, label: 'Неделя' },
+];
+const MINUTES = [10, 15, 20, 30, 45];
 
 function inDays(n: number): string {
   const d = new Date(Date.now() + n * 86_400_000);
@@ -18,7 +29,9 @@ export function TestEditor({ onSent }: { onSent: () => void }) {
   const [classes, setClasses] = useState<SchoolClass[] | null>(null);
   const [title, setTitle] = useState('');
   const [classId, setClassId] = useState(0);
+  const [mode, setMode] = useState<Mode>('home');
   const [due, setDue] = useState(inDays(3));
+  const [minutes, setMinutes] = useState(20);
   const [text, setText] = useState('');
   const [preview, setPreview] = useState<TestPreview | null>(null);
   const [notes, setNotes] = useState<ConvertedLine[]>([]);
@@ -55,7 +68,10 @@ export function TestEditor({ onSent }: { onSent: () => void }) {
     setBusy(true);
     setError('');
     try {
-      const result = await api.teacher.createTest({ title: title.trim(), class_id: classId, due, text });
+      const base = { title: title.trim(), class_id: classId, text };
+      const result = mode === 'home'
+        ? await api.teacher.createTest({ ...base, due })
+        : await api.teacher.startLesson({ ...base, minutes });
       notify('success');
       setSent(result.sent);
     } catch (e) {
@@ -76,8 +92,10 @@ export function TestEditor({ onSent }: { onSent: () => void }) {
   }
   if (sent !== null) {
     return (
-      <Placeholder className="screen" header={`Отправлено: ${sent}`}
-        description="Бот написал каждому ученику класса. За день до срока не сдавшим придёт напоминание."
+      <Placeholder className="screen" header={mode === 'home' ? `Отправлено: ${sent}` : `Контрольная идёт: ${minutes} мин`}
+        description={mode === 'home'
+          ? 'Бот написал ученикам класса. За день до срока не сдавшим придёт напоминание.'
+          : 'Ученикам пришла кнопка «Открыть тест». Когда время выйдет, ответы сдадутся сами. Закончить раньше — в отчёте теста.'}
         action={<Button size="l" onClick={onSent}>К тестам</Button>} />
     );
   }
@@ -90,11 +108,37 @@ export function TestEditor({ onSent }: { onSent: () => void }) {
         <Section header="Название">
           <Input value={title} placeholder="Контрольная: времена" onChange={(e) => setTitle(e.target.value)} />
         </Section>
-        <Section header="Кому и до какого числа">
+        <Section header="Класс">
           <Select value={classId} onChange={(e) => setClassId(Number(e.target.value))}>
             {classes.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.members})</option>)}
           </Select>
-          <Input type="date" value={due} min={inDays(0)} onChange={(e) => setDue(e.target.value)} />
+        </Section>
+
+        <Section header="Как сдают" footer={mode === 'home'
+          ? 'Домашний: ученик решает, когда удобно, до конца выбранного дня. Ответы и балл откроются после срока.'
+          : 'На уроке: время пошло сразу после «Начать». У каждого ученика на экране таймер; когда время выйдет, ответы сдадутся сами.'}>
+          <SegmentedControl>
+            <SegmentedControl.Item selected={mode === 'home'} onClick={() => setMode('home')}>🏠 Домашний</SegmentedControl.Item>
+            <SegmentedControl.Item selected={mode === 'lesson'} onClick={() => setMode('lesson')}>⏱ На уроке</SegmentedControl.Item>
+          </SegmentedControl>
+          {mode === 'home' ? (
+            <div className="t-format">
+              <span>Сдать до:</span>
+              <div className="t-chips">
+                {DUE_PRESETS.map((p) => (
+                  <Chip key={p.days} on={due === inDays(p.days)} onClick={() => setDue(inDays(p.days))}>{p.label}</Chip>
+                ))}
+              </div>
+              <Input type="date" value={due} min={inDays(0)} onChange={(e) => setDue(e.target.value)} />
+            </div>
+          ) : (
+            <div className="t-format">
+              <span>Время на тест:</span>
+              <div className="t-chips">
+                {MINUTES.map((m) => <Chip key={m} on={minutes === m} onClick={() => setMinutes(m)}>{`${m} мин`}</Chip>)}
+              </div>
+            </div>
+          )}
         </Section>
 
         <Section header="Вопросы, по одному на строку">
@@ -140,11 +184,15 @@ export function TestEditor({ onSent }: { onSent: () => void }) {
       {error && <Cell multiline className="error">{error}</Cell>}
       <div className="bottom">
         <Button size="l" stretched disabled={!ready || busy} loading={busy} onClick={send}>
-          Отправить классу
+          {mode === 'home' ? `Отправить · до ${dayMonth(due)}` : `Начать сейчас · ${minutes} мин`}
         </Button>
       </div>
     </div>
   );
+}
+
+function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
+  return <Button size="s" mode={on ? 'filled' : 'bezeled'} onClick={onClick}>{children}</Button>;
 }
 
 function AiImport({ onLines }: { onLines: (lines: ConvertedLine[]) => void }) {

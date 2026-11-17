@@ -629,6 +629,7 @@ class TestReport(BaseModel):
     id: int
     title: str
     due: date
+    ends_at: datetime | None
     class_name: str
     closed: bool
     questions: list[Question]

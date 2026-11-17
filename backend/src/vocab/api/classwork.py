@@ -196,9 +196,11 @@ async def _announce_group(chat_id: int, text: str, test_id: int) -> None:
 
 @router.post("/teacher/tests/live", response_model=schemas.TestCreated)
 async def post_live_test(
-    body: schemas.LiveTestIn, request: Request, teacher_id: int = Depends(teacher_user)
+    body: schemas.LiveTestIn, request: Request, background: BackgroundTasks,
+    teacher_id: int = Depends(teacher_user),
 ) -> schemas.TestCreated:
-    """Контрольная на уроке: время идёт с этой секунды, тест объявляется в группе класса."""
+    """Контрольная на уроке: время идёт с этой секунды. Есть группа класса —
+    объявление там с кнопкой «Закончить», нет — каждому ученику в личку."""
     questions = _questions(body.text)
     title = body.title.strip()
     ends_at = datetime.now(UTC) + timedelta(minutes=body.minutes)
@@ -206,20 +208,20 @@ async def post_live_test(
         if not await repo.owns_class(conn, body.class_id, teacher_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "нет такого класса")
         chat_id = await repo.class_chat_id(conn, body.class_id)
-        if chat_id is None:
-            raise HTTPException(status.HTTP_409_CONFLICT, "К классу не привязана группа: напиши /bind в группе класса")
+        tg_ids = await repo.class_member_tg_ids(conn, body.class_id)
         test_id = await repo.create_test(conn, body.class_id, title, questions, _today(), ends_at)
     until = ends_at.astimezone(ZoneInfo(settings().tz))
+    text = (f"📝 Контрольная «{title}»\nВопросов: {len(questions)} · "
+            f"время: {body.minutes} мин, до {until:%H:%M} · одна попытка")
+    if chat_id is None:
+        background.add_task(_announce, tg_ids, text, test_id)
+        return schemas.TestCreated(id=test_id, sent=len(tg_ids))
     buttons = [
         {"text": "Открыть", "url": await _bot_link(f"startapp=test_{test_id}")},
         {"text": "⏹ Закончить", "callback_data": f"examstop:{test_id}"},
     ]
-    await _telegram(
-        "sendMessage", chat_id=chat_id, reply_markup={"inline_keyboard": [buttons]},
-        text=(f"📝 Контрольная «{title}»\nВопросов: {len(questions)} · "
-              f"время: {body.minutes} мин, до {until:%H:%M} · одна попытка"),
-    )
-    return schemas.TestCreated(id=test_id, sent=0)
+    await _telegram("sendMessage", chat_id=chat_id, reply_markup={"inline_keyboard": [buttons]}, text=text)
+    return schemas.TestCreated(id=test_id, sent=len(tg_ids))
 
 
 @router.post("/teacher/tests/{test_id}/finish", status_code=status.HTTP_204_NO_CONTENT)
@@ -289,7 +291,7 @@ def _report(test, rows, accepted: dict[int, set[str]]) -> schemas.TestReport:
         for i in range(len(owner))
     ]
     return schemas.TestReport(
-        **{k: test[k] for k in ("id", "title", "due", "class_name", "closed")},
+        **{k: test[k] for k in ("id", "title", "due", "ends_at", "class_name", "closed")},
         questions=questions, gaps=gaps, students=students,
     )
 

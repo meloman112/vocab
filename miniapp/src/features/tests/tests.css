@@ -136,3 +136,58 @@
   background: var(--tg-theme-secondary-bg-color, #f1f1f1);
   color: var(--tg-theme-text-color, inherit);
 }
+
+.t-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.t-timer--end {
+  background: var(--g-red);
+  color: #fff;
+}
+
+/* Номера вопросов: заполненный отмечен, текущий выделен — видно, что осталось. */
+.t-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.t-dot {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 6px;
+  border: 1.5px solid var(--g-line);
+  border-radius: 10px;
+  font: 600 15px var(--tgui--font-family);
+  color: var(--g-muted);
+  background: none;
+}
+
+.t-dot.done {
+  border-color: var(--g-ok);
+  color: var(--g-ok);
+}
+
+.t-dot.on {
+  border-color: var(--g-pen);
+  background: var(--g-pen);
+  color: #fff;
+}
+
+.t-one .g-sent {
+  font-size: 20px;
+}
+
+.t-one,
+.t-review {
+  gap: 8px;
+  padding-left: 16px;
+}
+
+.t-nav {
+  display: flex;
+  gap: 8px;
+}

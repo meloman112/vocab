@@ -5,7 +5,7 @@ import { api } from '../../api/client';
 import type { StudentScore, TestReport as Report } from '../../api/types';
 import { notify } from '../../lib/telegram';
 import { firstGaps, isGap, QuestionText } from './QuestionText';
-import { dayMonth } from './TestsScreen';
+import { deadline } from './TestsScreen';
 
 type Tab = 'questions' | 'students';
 
@@ -51,7 +51,7 @@ export function TestReport({ id, onDeleted }: { id: number; onDeleted: () => voi
       <header className="t-head">
         <Title level="2" weight="1">{report.title}</Title>
         <Caption className="hint">
-          {report.class_name} · {report.closed ? 'срок прошёл' : `до ${dayMonth(report.due)}`} · сдали {done.length} из {report.students.length}
+          {report.class_name} · {report.closed ? 'срок прошёл' : deadline(report)} · сдали {done.length} из {report.students.length}
           {avg !== null && ` · средний балл ${avg}%`}
         </Caption>
       </header>
@@ -109,6 +109,12 @@ export function TestReport({ id, onDeleted }: { id: number; onDeleted: () => voi
       )}
 
       <div className="bottom">
+        {report.ends_at && !report.closed && (
+          <Button size="l" stretched loading={busy === 'finish'}
+            onClick={() => act('finish', () => api.teacher.finishTest(report.id), () => setVersion((v) => v + 1))}>
+            ⏹ Закончить сейчас
+          </Button>
+        )}
         {confirmDelete && <Caption className="t-confirm">Тест и ответы учеников удалятся насовсем.</Caption>}
         <Button size="m" mode="plain" stretched loading={busy === 'delete'}
           onClick={() => (confirmDelete ? act('delete', () => api.teacher.deleteTest(report.id), onDeleted) : setConfirmDelete(true))}>
