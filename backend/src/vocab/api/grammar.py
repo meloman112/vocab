@@ -86,10 +86,12 @@ async def post_attempt(
 
 @router.post("/grammar/recheck", response_model=schemas.RecheckOut)
 async def recheck(
-    body: schemas.Recheck, request: Request, _: int = Depends(current_user)
+    body: schemas.Recheck, request: Request,
+    who: Identity = Depends(identity), user_id: int = Depends(current_user),
 ) -> schemas.RecheckOut:
     """Ученик считает, что движок зря не принял ответ. Если ИИ согласен,
-    ответ засчитывается всем — как ответ, принятый админом."""
+    ответ засчитывается ему и его классам, а всем — только по запросу админа:
+    бот открыт, и уговорить модель мог бы кто угодно."""
     item = _known(body.item)
     if body.slot >= item.slots:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "нет такого пропуска")
@@ -104,7 +106,8 @@ async def recheck(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "ИИ не ответил, попробуй ещё раз") from exc
     if verdict["ok"]:
         async with request.app.state.pool.acquire() as conn:
-            await repo.accept_answer(conn, body.item, body.slot, answer)
+            scope = None if settings().is_admin(who.tg_id) else user_id
+            await repo.accept_answer(conn, body.item, body.slot, answer, scope)
     return schemas.RecheckOut(**verdict)
 
 

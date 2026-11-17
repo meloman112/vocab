@@ -759,11 +759,23 @@ async def grammar_accepted(conn: asyncpg.Connection, user_id: int) -> list[async
 ACCEPTED_TWICE = "on conflict (item, slot, answer, coalesce(teacher_id, 0)) do nothing"
 
 
-async def accept_answer(conn: asyncpg.Connection, item: str, slot: int, answer: str) -> None:
-    """Ответ засчитал ИИ: added_by пуст, учитель отличит его от своих."""
+async def accept_answer(
+    conn: asyncpg.Connection, item: str, slot: int, answer: str, student_id: int | None
+) -> None:
+    """Ответ засчитал ИИ: added_by пуст, учитель отличит его от своих.
+    student_id пуст — ответ общий; иначе он виден ученику и классам его учителей."""
     await conn.execute(
-        f"insert into grammar_accepted (item, slot, answer) values ($1, $2, $3) {ACCEPTED_TWICE}",
-        item, slot, answer,
+        f"""
+        insert into grammar_accepted (item, slot, answer, teacher_id)
+        select $1, $2, $3, scope from (
+          select $4::bigint as scope
+          union
+          select c.teacher_id from class_members m join classes c on c.id = m.class_id
+          where m.user_id = $4
+        ) scopes
+        {ACCEPTED_TWICE}
+        """,
+        item, slot, answer, student_id,
     )
 
 
