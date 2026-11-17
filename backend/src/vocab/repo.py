@@ -28,18 +28,22 @@ WORD_COLUMNS = "id, lemma, translation, ipa, pos, forms, irregular, examples, zi
 # 10 очков за каждое повторение, как в Duolingo — за урок.
 XP_PER_REVIEW = 10
 
+# «Сегодня» у каждого своё: пояс пользователя, а пока мини-апп его не
+# прислал — общий. $1 — пользователь, $2 — общий пояс.
+USER_TZ = "(select coalesce(tz, $2) from users where id = $1)"
+
 # Серия после сегодняшнего повторения: сегодня уже было — та же, вчера
-# было — +1, иначе начинается заново. $2 — часовой пояс.
+# было — +1, иначе начинается заново. $2 — общий часовой пояс.
 NEW_STREAK = """
-    case when last_day = (now() at time zone $2)::date then streak
-         when last_day = (now() at time zone $2)::date - 1 then streak + 1
+    case when last_day = (now() at time zone coalesce(tz, $2))::date then streak
+         when last_day = (now() at time zone coalesce(tz, $2))::date - 1 then streak + 1
          else 1 end
 """
 
 # Показываемая серия: пропущенный день обнуляет её сразу, не дожидаясь
 # следующего повторения, которое обнулит её в базе.
 LIVE_STREAK = """
-    case when u.last_day >= (now() at time zone $1)::date - 1 then u.streak else 0 end
+    case when u.last_day >= (now() at time zone coalesce(u.tz, $1))::date - 1 then u.streak else 0 end
 """
 
 # Заблокированное слово пропадает из всех личных очередей и счётчиков.
@@ -59,16 +63,20 @@ async def init_connection(conn: asyncpg.Connection) -> None:
     )
 
 
-async def ensure_user(conn: asyncpg.Connection, tg_id: int, name: str | None) -> int:
+async def ensure_user(
+    conn: asyncpg.Connection, tg_id: int, name: str | None, tz: str | None = None
+) -> int:
     # do update вместо do nothing: do nothing ничего не возвращает,
     # и на существующем пользователе пришлось бы делать второй запрос.
-    # Имя знает только мини-апп; запрос от бота (name = None) его не стирает.
+    # Имя и пояс знает только мини-апп; запрос от бота (None) их не стирает.
     return await conn.fetchval(
-        "insert into users (tg_id, name) values ($1, $2)"
-        " on conflict (tg_id) do update set name = coalesce(excluded.name, users.name)"
+        "insert into users (tg_id, name, tz) values ($1, $2, $3)"
+        " on conflict (tg_id) do update set name = coalesce(excluded.name, users.name),"
+        " tz = coalesce(excluded.tz, users.tz)"
         " returning id",
         tg_id,
         name,
+        tz,
     )
 
 
@@ -76,9 +84,9 @@ async def spend_llm(conn: asyncpg.Connection, user_id: int, tz: str) -> int:
     """Учитывает запрос к ИИ и возвращает, сколько их сегодня с этим."""
     return await conn.fetchval(
         "update users set"
-        " llm_used = case when llm_day = (now() at time zone $2)::date"
+        " llm_used = case when llm_day = (now() at time zone coalesce(tz, $2))::date"
         "                 then llm_used + 1 else 1 end,"
-        " llm_day = (now() at time zone $2)::date"
+        " llm_day = (now() at time zone coalesce(tz, $2))::date"
         " where id = $1 returning llm_used",
         user_id,
         tz,
@@ -246,7 +254,7 @@ async def new_today(conn: asyncpg.Connection, user_id: int, tz: str) -> int:
     """Сколько слов сегодня пришло в карточки: и своих, и из словаря."""
     return await conn.fetchval(
         "select count(*) from cards where user_id = $1"
-        " and (created_at at time zone $2)::date = (now() at time zone $2)::date",
+        f" and (created_at at time zone {USER_TZ})::date = (now() at time zone {USER_TZ})::date",
         user_id, tz,
     )
 
@@ -329,7 +337,7 @@ async def touch_streak(conn: asyncpg.Connection, user_id: int, tz: str) -> None:
     await conn.execute(
         f"update users set streak = {NEW_STREAK},"
         f" best_streak = greatest(best_streak, {NEW_STREAK}),"
-        f" last_day = (now() at time zone $2)::date"
+        f" last_day = (now() at time zone coalesce(tz, $2))::date"
         f" where id = $1",
         user_id,
         tz,
@@ -351,8 +359,8 @@ async def stats(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Reco
           count(*) filter (where c.known_at is null and c.due <= now()) as due_now,
           count(*) filter (
             where c.known_at is null
-              and c.due < (date_trunc('day', now() at time zone $2) + interval '1 day')
-                          at time zone $2
+              and c.due < (date_trunc('day', now() at time zone {USER_TZ}) + interval '1 day')
+                          at time zone {USER_TZ}
           )                                          as due_today
         from {USER_CARDS}
         """,
@@ -399,13 +407,13 @@ async def forecast(
         f"""
         with days as (
           select generate_series(
-            date_trunc('day', now() at time zone $2),
-            date_trunc('day', now() at time zone $2) + make_interval(days => $3 - 1),
+            date_trunc('day', now() at time zone {USER_TZ}),
+            date_trunc('day', now() at time zone {USER_TZ}) + make_interval(days => $3 - 1),
             interval '1 day'
           )::date as day
         ),
         due as (
-          select (c.due at time zone $2)::date as day from {USER_CARDS} and c.known_at is null
+          select (c.due at time zone {USER_TZ})::date as day from {USER_CARDS} and c.known_at is null
         )
         select days.day, count(due.day) as count
         from days left join due on due.day = days.day
@@ -426,11 +434,24 @@ async def streak(conn: asyncpg.Connection, user_id: int, tz: str) -> asyncpg.Rec
     )
 
 
-async def leaderboard(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
+async def in_class(conn: asyncpg.Connection, user_id: int) -> bool:
+    """Состоит в классе или ведёт его: есть с кем соревноваться в рейтинге класса."""
+    return await conn.fetchval(
+        "select exists (select 1 from classes where teacher_id = $1)"
+        " or exists (select 1 from class_members where user_id = $1)",
+        user_id,
+    )
+
+
+async def leaderboard(
+    conn: asyncpg.Connection, tz: str, classmate_of: int | None = None
+) -> list[asyncpg.Record]:
     """XP за текущую неделю с понедельника — у всех, кто на ней занимался.
+    classmate_of — только он сам, его одноклассники и учителя его классов.
 
     Неделя, а не всё время: иначе первые пользователи навсегда заняли бы
-    верх, и новичку не за что было бы бороться.
+    верх, и новичку не за что было бы бороться. Граница недели общая для
+    всех — по общему поясу, а серия у каждого по своему.
     """
     # Решённое задание тетради стоит столько же, сколько повторение слова:
     # иначе ученики, которые только делают грамматику, в рейтинг не попали бы.
@@ -442,6 +463,16 @@ async def leaderboard(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]
           where r.reviewed_at >= week.start
           union all
           select g.user_id from grammar_results g, week where g.updated_at >= week.start
+        ),
+        mine as (
+          select c.id, c.teacher_id from classes c
+          where c.teacher_id = $2 or exists (
+            select 1 from class_members m where m.class_id = c.id and m.user_id = $2)
+        ),
+        peers as (
+          select teacher_id as user_id from mine
+          union select m.user_id from class_members m join mine on mine.id = m.class_id
+          union select $2
         )
         select u.id as user_id, coalesce(u.name, 'Без имени') as name,
                count(*) * {XP_PER_REVIEW} as xp,
@@ -449,10 +480,12 @@ async def leaderboard(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]
                rank() over (order by count(*) desc) as place
         from activity a
         join users u on u.id = a.user_id
+        where $2::bigint is null or u.id in (select user_id from peers)
         group by u.id
         order by place, u.id
         """,
         tz,
+        classmate_of,
     )
 
 
@@ -461,35 +494,37 @@ async def reminder_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Re
     ещё не занимался. Что именно сказать (или промолчать), решает бот.
 
     gap — сколько дней назад было последнее повторение; null — не было ни разу.
+    tz — пояс пользователя: по нему API решает, чей сейчас час напоминания.
     """
     return await conn.fetch(
         """
-        select u.tg_id, u.streak,
-               (now() at time zone $1)::date - u.last_day as gap,
+        select u.tg_id, u.streak, coalesce(u.tz, $1) as tz,
+               (now() at time zone coalesce(u.tz, $1))::date - u.last_day as gap,
                count(c.id) filter (
                  where c.due <= now() and not w.banned and c.known_at is null
                ) as due
         from users u
         join cards c on c.user_id = u.id
         join words w on w.id = c.word_id
-        where u.last_day is null or u.last_day < (now() at time zone $1)::date
+        where u.last_day is null or u.last_day < (now() at time zone coalesce(u.tz, $1))::date
         group by u.id
         """,
         tz,
     )
 
 
-async def warmup_targets(conn: asyncpg.Connection) -> list[asyncpg.Record]:
+async def warmup_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
     """У кого есть слова, которые пора повторить, — им разминка в чате."""
     return await conn.fetch(
         """
-        select u.tg_id, count(*) as due
+        select u.tg_id, coalesce(u.tz, $1) as tz, count(*) as due
         from users u
         join cards c on c.user_id = u.id
         join words w on w.id = c.word_id
         where c.due <= now() and not w.banned and c.known_at is null
         group by u.id
-        """
+        """,
+        tz,
     )
 
 

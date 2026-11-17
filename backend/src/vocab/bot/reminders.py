@@ -54,9 +54,9 @@ def reminder_text(target: dict[str, Any], evening: bool) -> str | None:
     return COMEBACK_TEXTS.get(gap)
 
 
-async def notify(bot: Bot, api: VocabAPI, cfg: Settings, evening: bool) -> None:
+async def notify(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
     for target in await api.reminder_targets():
-        text = reminder_text(target, evening)
+        text = reminder_text(target, target["evening"])
         if text is None:
             continue
         try:
@@ -135,27 +135,22 @@ async def keep_warm(bot: Bot, widgets: Widgets) -> None:
 
 def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=cfg.tz)
-    # Последнее напоминание дня — «вечернее»: в нём спасаем серию.
-    evening_hour = max(cfg.reminder_hour_list)
-    for hour in cfg.reminder_hour_list:
-        scheduler.add_job(
-            notify,
-            CronTrigger(hour=hour, minute=0),
-            args=(bot, api, cfg, hour == evening_hour),
-            id=f"remind-{hour}",
-            # Контейнер, перезапущенный в 09:03, не должен присылать
-            # пропущенное напоминание — оно уже неактуально.
-            misfire_grace_time=300,
-        )
-    scheduler.add_job(remind_tests, CronTrigger(hour=evening_hour, minute=5), args=(bot, api, cfg),
-                      id="remind-tests", misfire_grace_time=300)
-    for hour in cfg.warmup_hour_list:
-        scheduler.add_job(warmups, CronTrigger(hour=hour, minute=0), args=(widgets, api, cfg),
-                          id=f"warmup-{hour}", misfire_grace_time=300)
+    # Напоминания и разминки — каждый час: чей сейчас местный час из
+    # REMINDER_HOURS и WARMUP_HOURS, решает API по поясу пользователя.
+    # Контейнер, перезапущенный в 09:03, не должен присылать пропущенное
+    # напоминание — оно уже неактуально.
+    scheduler.add_job(notify, CronTrigger(minute=0), args=(bot, api, cfg),
+                      id="remind", misfire_grace_time=300)
+    scheduler.add_job(warmups, CronTrigger(minute=0), args=(widgets, api, cfg),
+                      id="warmup", misfire_grace_time=300)
+    # Срок теста общий для класса, поэтому о нём — по общему поясу.
+    scheduler.add_job(remind_tests, CronTrigger(hour=max(cfg.reminder_hour_list), minute=5),
+                      args=(bot, api, cfg), id="remind-tests", misfire_grace_time=300)
     scheduler.add_job(send_digest, CronTrigger(day_of_week=cfg.digest_days, hour=cfg.digest_hour, minute=0),
                       args=(bot, api, cfg), id="digest", misfire_grace_time=300)
     scheduler.add_job(post_summaries, IntervalTrigger(seconds=30), args=(bot, api), id="exam-summaries")
     scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()
-    log.info("напоминания в %s, разминки в %s (%s)", cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)
+    log.info("напоминания в %s, разминки в %s по местному времени, без пояса — %s",
+             cfg.reminder_hour_list, cfg.warmup_hour_list, cfg.tz)
     return scheduler

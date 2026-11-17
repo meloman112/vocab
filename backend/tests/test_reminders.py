@@ -1,5 +1,8 @@
 """Кому и что пишет бот. Ошибка здесь — либо спам, либо сгоревшая серия."""
 
+from datetime import UTC, datetime
+
+from vocab.api.routes import at_local_hours
 from vocab.bot.reminders import digest_text, reminder_text
 
 
@@ -57,3 +60,20 @@ def test_digest_student_without_mistakes_has_no_most_common_part():
 
 def test_digest_is_silent_on_an_empty_week():
     assert digest_text({"students": [], "hard_items": [], "teachers": [1]}) is None
+
+
+def test_reminder_goes_to_those_whose_local_hour_it_is():
+    rows = [{"tg_id": 1, "tz": "Asia/Tashkent"}, {"tg_id": 2, "tz": "Europe/Berlin"}, {"tg_id": 3, "tz": "UTC"}]
+    # 04:00 UTC зимой: в Ташкенте 09:00, в Берлине 05:00.
+    now = datetime(2026, 1, 15, 4, 0, tzinfo=UTC)
+    assert [(r["tg_id"], hour) for r, hour in at_local_hours(rows, [9, 20], now)] == [(1, 9)]
+    # 19:00 UTC: в Берлине 20:00 — последний час дня, в Ташкенте уже полночь.
+    now = datetime(2026, 1, 15, 19, 0, tzinfo=UTC)
+    assert [(r["tg_id"], hour) for r, hour in at_local_hours(rows, [9, 20], now)] == [(2, 20)]
+
+
+def test_half_hour_zone_is_reminded_once_within_its_hour():
+    rows = [{"tg_id": 1, "tz": "Asia/Kolkata"}]
+    assert at_local_hours(rows, [9], datetime(2026, 1, 15, 3, 0, tzinfo=UTC)) == []
+    assert at_local_hours(rows, [9], datetime(2026, 1, 15, 4, 0, tzinfo=UTC)) == [(rows[0], 9)]
+    assert at_local_hours(rows, [9], datetime(2026, 1, 15, 5, 0, tzinfo=UTC)) == []

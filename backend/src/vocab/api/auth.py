@@ -7,6 +7,7 @@ import logging
 import time
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, unquote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
@@ -94,10 +95,25 @@ async def identity(
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "нужен X-Init-Data или X-Token")
 
 
+def known_tz(name: str | None) -> str | None:
+    """Пояс из заголовка X-TZ мини-аппа. Незнакомый не сохраняем: запрос из-за
+    него падать не должен, а «сегодня» останется по прежнему поясу."""
+    if not name:
+        return None
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+    return name
+
+
 async def current_user(request: Request, who: Identity = Depends(identity)) -> int:
     """Возвращает users.id."""
+    # Из request, а не Header-параметром: admin_user и teacher_user зовут
+    # эту функцию напрямую, и параметр остался бы незаполненным.
+    tz = known_tz(request.headers.get("X-TZ"))
     async with request.app.state.pool.acquire() as conn:
-        return await repo.ensure_user(conn, who.tg_id, who.name)
+        return await repo.ensure_user(conn, who.tg_id, who.name, tz)
 
 
 async def admin_user(request: Request, who: Identity = Depends(identity)) -> int:

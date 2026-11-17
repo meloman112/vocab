@@ -2,7 +2,9 @@
 
 import logging
 import random
+from datetime import UTC, datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
@@ -235,8 +237,9 @@ async def get_me(
     async with request.app.state.pool.acquire() as conn:
         teacher = admin or await repo.is_teacher(conn, user_id)
         grammar = await repo.grammar_summary(conn, user_id)
+        in_class = await repo.in_class(conn, user_id)
     return schemas.Me(
-        is_admin=admin, is_teacher=teacher,
+        is_admin=admin, is_teacher=teacher, in_class=in_class,
         grammar_done=grammar["done"], grammar_wrong=grammar["wrong_now"],
     )
 
@@ -311,10 +314,13 @@ async def get_stats(
 
 @router.get("/leaderboard", response_model=schemas.LeaderboardOut)
 async def get_leaderboard(
-    request: Request, user_id: int = Depends(current_user)
+    request: Request,
+    scope: Literal["global", "class"] = "global",
+    user_id: int = Depends(current_user),
 ) -> schemas.LeaderboardOut:
+    """scope=class — рейтинг среди своих классов: одноклассники и учителя."""
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.leaderboard(conn, settings().tz)
+        rows = await repo.leaderboard(conn, settings().tz, user_id if scope == "class" else None)
     me = next((r for r in rows if r["user_id"] == user_id), None)
     return schemas.LeaderboardOut(
         top=[schemas.LeaderRow(**dict(r)) for r in rows[:LEADERBOARD_SIZE]],
@@ -357,18 +363,31 @@ async def weak_words(
     return [schemas.WeakCard(**dict(row)) for row in rows]
 
 
+def at_local_hours(rows, hours: list[int], now: datetime) -> list[tuple]:
+    """Строки с полем tz, у которых местный час сейчас — один из hours, и сам
+    этот час. Бот спрашивает раз в час, поэтому каждому час выпадает однажды."""
+    local = [(r, now.astimezone(ZoneInfo(r["tz"])).hour) for r in rows]
+    return [(r, hour) for r, hour in local if hour in hours]
+
+
 @router.get(
     "/internal/reminders",
     response_model=list[schemas.ReminderTarget],
     dependencies=[Depends(service_only)],
 )
 async def internal_reminders(request: Request) -> list[schemas.ReminderTarget]:
-    """Кто сегодня ещё не занимался. Планировщик живёт в процессе бота, а в
-    базу ходит только API — иначе схему знали бы два процесса.
+    """Кто сегодня ещё не занимался и у кого сейчас час напоминаний. Планировщик
+    живёт в процессе бота, а в базу ходит только API — иначе схему знали бы
+    два процесса.
     """
+    cfg = settings()
+    hours = cfg.reminder_hour_list
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.reminder_targets(conn, settings().tz)
-    return [schemas.ReminderTarget(**dict(r)) for r in rows]
+        rows = await repo.reminder_targets(conn, cfg.tz)
+    return [
+        schemas.ReminderTarget(**dict(r), evening=hour == max(hours))
+        for r, hour in at_local_hours(rows, hours, datetime.now(UTC))
+    ]
 
 
 @router.get("/internal/digest", response_model=schemas.Digest, dependencies=[Depends(service_only)])
@@ -389,10 +408,14 @@ async def internal_digest(request: Request) -> schemas.Digest:
     dependencies=[Depends(service_only)],
 )
 async def internal_warmup(request: Request) -> list[schemas.WarmupTarget]:
-    """Кому слать разминку в чат: у кого есть слова к повторению."""
+    """Кому слать разминку в чат: у кого есть слова к повторению и сейчас час разминки."""
+    cfg = settings()
     async with request.app.state.pool.acquire() as conn:
-        rows = await repo.warmup_targets(conn)
-    return [schemas.WarmupTarget(**dict(r)) for r in rows]
+        rows = await repo.warmup_targets(conn, cfg.tz)
+    return [
+        schemas.WarmupTarget(**dict(r))
+        for r, _ in at_local_hours(rows, cfg.warmup_hour_list, datetime.now(UTC))
+    ]
 
 
 @router.get("/games/verbs", response_model=schemas.VerbsOut)

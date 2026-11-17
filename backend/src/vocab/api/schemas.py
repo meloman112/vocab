@@ -209,6 +209,8 @@ class ReminderTarget(BaseModel):
     # Дней с последнего повторения; None — не повторял ни разу.
     gap: int | None
     due: int
+    # Сейчас у пользователя последний час напоминаний: спасаем серию.
+    evening: bool
 
 
 class DigestStudent(BaseModel):
@@ -322,6 +324,8 @@ class Me(BaseModel):
     is_admin: bool
     # Учителю в меню показывается «Ученики». Админ — всегда учитель.
     is_teacher: bool
+    # Есть класс (ученик или учитель) — в рейтинге показывается «Мой класс».
+    in_class: bool
     # Сколько заданий тетради сделано и сколько из них пока с ошибкой.
     grammar_done: int
     grammar_wrong: int

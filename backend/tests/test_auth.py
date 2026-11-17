@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 import pytest
 from fastapi import HTTPException
 
-from vocab.api.auth import parse_init_data
+from vocab.api.auth import known_tz, parse_init_data
 
 BOT_TOKEN = "123456:test-token"
 
@@ -49,3 +49,10 @@ def test_stale_init_data_is_rejected():
     old = int(time.time()) - 48 * 3600
     with pytest.raises(HTTPException):
         parse_init_data(make_init_data(auth_date=old), BOT_TOKEN)
+
+
+def test_unknown_timezone_is_not_saved():
+    assert known_tz("Asia/Tashkent") == "Asia/Tashkent"
+    assert known_tz("Mars/Phobos") is None
+    assert known_tz("../etc/passwd") is None
+    assert known_tz(None) is None
