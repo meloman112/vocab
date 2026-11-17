@@ -128,6 +128,28 @@ section { padding: 72px 0; }
 .dots i.ok { border-color: var(--green); color: var(--green); }
 .dots i.now { background: var(--blue); border-color: var(--blue); color: #fff; }
 
+/* слова */
+.words { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
+.chat { background: #dfe9d8 repeating-radial-gradient(circle at 20% 30%, #d6e2cd 0 2px, transparent 2px 18px); border-radius: 28px; padding: 22px; display: grid; gap: 10px; }
+.msg { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 15.5px; line-height: 1.45; box-shadow: 0 1px 1px rgb(0 0 0 / .08); }
+.msg--me { justify-self: end; background: #e1f6c9; border-bottom-right-radius: 6px; font-weight: 700; }
+.msg--bot { background: #fff; border-bottom-left-radius: 6px; }
+.msg--bot b { font-family: Unbounded, sans-serif; color: var(--ink); }
+.msg--bot i { color: var(--muted); }
+.msg--bot .ex { display: block; margin-top: 6px; padding-left: 10px; border-left: 3px solid var(--blue); }
+.msg .btns { display: flex; gap: 6px; margin-top: 10px; }
+.msg .btns span { flex: 1; text-align: center; padding: 7px; border-radius: 10px; background: #eef4ff; color: var(--blue); font-weight: 700; font-size: 14px; }
+.modes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.modes span { padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-weight: 700; font-size: 15px; }
+.curve { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px; }
+.curve p { font-size: 15px; color: #4b5563; margin-bottom: 14px; }
+.track { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.track span { text-align: center; padding: 10px 4px; border-radius: 12px; font: 800 14px Manrope; color: var(--ink); background: #e7f6ec; }
+.track span:nth-child(2) { background: #cdeed7; }
+.track span:nth-child(3) { background: #a7e2bb; }
+.track span:nth-child(4) { background: #7fd29d; }
+.track span:nth-child(5) { background: var(--green); color: #fff; }
+
 /* цифры */
 .numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 36px; margin-top: 8px; border-radius: var(--radius); background: var(--ink); color: #fff; }
 .numbers b { display: block; font: 800 clamp(26px, 4vw, 44px) Unbounded, sans-serif; color: var(--marker); white-space: nowrap; }
@@ -173,6 +195,7 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 14.
   .hero, .teacher { grid-template-columns: 1fr; }
   .hero { padding-top: 16px; gap: 40px; }
   .features, .steps { grid-template-columns: 1fr; }
+  .words { grid-template-columns: 1fr; gap: 28px; }
   .numbers { grid-template-columns: repeat(2, 1fr); padding: 26px; }
   .teacher { padding: 28px 20px; gap: 32px; }
   section { padding: 56px 0; }
@@ -241,6 +264,37 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 14.
             <div class="dots"><i class="ok">1</i><i class="ok">2</i><i class="now">3</i><i>4</i><i>5</i></div>
           </div>
         </article>
+      </div>
+    </section>
+
+    <section id="words">
+      <p class="kicker reveal">Слова</p>
+      <h2 class="title reveal">Пришли слово — бот сам научит и напомнит</h2>
+      <div class="words">
+        <div class="chat reveal" aria-hidden="true">
+          <div class="msg msg--me">went</div>
+          <div class="msg msg--bot"><b>go</b> — идти, ехать<br><i>went — прошедшее время от go</i>
+            <span class="ex">We went to the park yesterday.</span>
+            <div class="btns"><span>✅ Добавлено в повторение</span></div>
+          </div>
+          <div class="msg msg--bot">⚖️ <b>Не путай:</b> go — идти куда-то, walk — идти пешком</div>
+          <div class="msg msg--bot">🔔 Пора повторить 12 слов — 5 минут</div>
+        </div>
+        <div>
+          <ul class="checks">
+            <li class="reveal"><span>Слово в любой форме: <i>went, children, reading</i> — бот найдёт начальную, даст перевод и примеры</span></li>
+            <li class="reveal">Готовые наборы: 3000 слов уровня B1 и глаголы с предлогами</li>
+            <li class="reveal">Повторение по алгоритму FSRS: слово возвращается, когда почти забылось</li>
+            <li class="reveal">Серия дней и рейтинг недели — чтобы не бросить</li>
+          </ul>
+          <div class="modes reveal">
+            <span>🎓 Учить</span><span>🔤 Выбери перевод</span><span>🧩 Пары</span><span>🎧 На слух</span><span>⌨️ Напиши слово</span><span>✍️ Вставь в пример</span><span>⚡ Неправильные глаголы</span>
+          </div>
+          <div class="curve reveal">
+            <p>Ответил верно — следующее повторение позже:</p>
+            <div class="track"><span>сегодня</span><span>1 день</span><span>4 дня</span><span>2 нед.</span><span>месяц</span></div>
+          </div>
+        </div>
       </div>
     </section>
 
