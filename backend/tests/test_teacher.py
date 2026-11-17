@@ -23,7 +23,7 @@ class Pool:
         yield None
 
 
-REQUEST = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(pool=Pool())))
+REQUEST = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(pool=Pool())), headers={})
 
 
 def fake(monkeypatch, name, result):
