@@ -314,7 +314,7 @@ body {
 /* Панель вкладок висит поверх низа экрана: под ней последний пункт не прячется,
    а экран с Placeholder не прокручивается на её высоту. */
 .tabs {
-  --tabbar: calc(84px + env(safe-area-inset-bottom, 0px));
+  --tabbar: calc(92px + max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)));
   padding-bottom: var(--tabbar);
 }
 
@@ -322,10 +322,18 @@ body {
   min-height: calc(100dvh - var(--tabbar));
 }
 
+/* telegram-ui не оставляет места под полоску «домой» iPhone: подписи ложились
+   на скруглённый край и тап по ним не попадал. Telegram отдаёт отступ своей
+   переменной, браузер — env(); берём больший. */
+.tabbar {
+  --bottom-inset: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  padding-bottom: max(var(--bottom-inset), 8px);
+}
+
 /* Со штатными полями в 16px «Грамматика» на узком телефоне обрезается. */
 .tab {
-  padding-left: 2px;
-  padding-right: 2px;
+  min-height: 60px;
+  padding: 10px 2px 6px;
 }
 
 /* Шапка вкладки: заголовок, строка цифр и одна главная кнопка. */

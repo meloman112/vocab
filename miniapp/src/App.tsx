@@ -89,7 +89,7 @@ export function App() {
         {showBoard && <LeaderboardScreen inClass={summary.me?.in_class ?? false} onBack={closeBoard} />}
       </ErrorBoundary>
       {tabbar && (
-        <Tabbar>
+        <Tabbar className="tabbar">
           {TABS.map((t) => (
             <Tabbar.Item key={t.id} className="tab" text={t.text} selected={tab === t.id} onClick={() => setTab(t.id)}>
               <span className="icon">{t.icon}</span>
