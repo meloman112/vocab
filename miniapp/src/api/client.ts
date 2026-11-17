@@ -70,7 +70,7 @@ export const api = {
 
   stats: () => request<Stats>('/stats'),
 
-  leaderboard: () => request<Leaderboard>('/leaderboard'),
+  leaderboard: (scope: 'global' | 'class' = 'global') => request<Leaderboard>(`/leaderboard?scope=${scope}`),
 
   /** mode — карточка или режим теста: по нему видно, чем пользуются. */
   review: (cardId: number, rating: Rating, mode: 'card' | ModeId) =>

@@ -24,9 +24,9 @@ interface Props {
 const REVIEW = 2;
 
 const EMPTY: Partial<Record<Mode['id'], string>> = {
-  irregular: 'В твоих словах пока нет неправильных глаголов. Возьми их набором «Неправильные глаголы» на главной.',
-  learn: 'Слов пока нет. Возьми новые на главной или пришли боту английское слово.',
-  cloze: 'Ни в одном примере твоих слов не нашлось формы слова. Попробуй другой тест.',
+  irregular: 'В твоих словах пока нет неправильных глаголов. Возьми их набором «Неправильные глаголы» во вкладке «Слова».',
+  learn: 'Слов пока нет. Открой «Карточки» во вкладке «Слова» или пришли боту английское слово.',
+  cloze: 'Ни в одном примере твоих слов не нашлось формы слова. Попробуй другую тренировку.',
 };
 
 type Session = ReturnType<typeof useQuizSession> | ReturnType<typeof useLearnSession>;
@@ -65,8 +65,8 @@ function Flow({ mode, onCards, onLeaderboard, session }: Props & { session: Sess
     case 'empty':
       return (
         <Placeholder
-          header="Тестировать пока нечего"
-          description={EMPTY[mode.id] ?? 'Тесты берут слова, которые ты уже видел. Сначала пройди карточки.'}
+          header="Тренировать пока нечего"
+          description={EMPTY[mode.id] ?? 'Тренировки берут слова, которые ты уже видел. Сначала пройди карточки.'}
           className="screen"
           action={<Button size="l" onClick={onCards}>К карточкам</Button>}
         />

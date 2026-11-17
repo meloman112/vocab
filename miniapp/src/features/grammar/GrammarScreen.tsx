@@ -22,7 +22,7 @@ type View =
   | { name: 'run'; keys: string[]; title: string; review: boolean; back: View; nonce: number };
 
 /** Тетрадь: темы → упражнения → задания по одному, итоги и работа над ошибками. */
-export function GrammarScreen({ onExit }: { onExit: () => void }) {
+export function GrammarScreen() {
   const { data, error } = useGrammar();
   const [view, setView] = useState<View>({ name: 'home' });
   const [toastText, setToastText] = useState('');
@@ -36,10 +36,9 @@ export function GrammarScreen({ onExit }: { onExit: () => void }) {
 
   const back = useCallback(() => {
     if (view.name === 'run' || view.name === 'drill') setView(view.back);
-    else if (view.name === 'topic') setView({ name: 'home' });
-    else onExit();
-  }, [view, onExit]);
-  useBackButton(back);
+    else setView({ name: 'home' });
+  }, [view]);
+  useBackButton(view.name === 'home' ? null : back);
 
   // Фигурные скобки обязательны: в новых Chromium scrollTo возвращает
   // Promise, и React принял бы его за функцию очистки — «n is not a function».

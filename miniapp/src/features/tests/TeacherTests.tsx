@@ -1,4 +1,4 @@
-import { Button, Cell, Input, List, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
+import { Button, Caption, Cell, Input, List, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api/client';
@@ -11,8 +11,6 @@ import { deadline } from './TestsScreen';
 export function TeacherTests({ onNew, onOpen }: { onNew: () => void; onOpen: (id: number) => void }) {
   const [classes, setClasses] = useState<SchoolClass[] | null>(null);
   const [tests, setTests] = useState<TestRow[] | null>(null);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -21,20 +19,6 @@ export function TeacherTests({ onNew, onOpen }: { onNew: () => void; onOpen: (id
       setTests(t);
     }, (e: Error) => setError(e.message));
   }, []);
-
-  async function createClass() {
-    setBusy(true);
-    try {
-      const created = await api.teacher.createClass(name.trim());
-      notify('success');
-      setClasses((list) => [...(list ?? []), created]);
-      setName('');
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (error) return <Placeholder header="Не открылось" description={error} />;
   if (!classes || !tests) return <div className="screen--center"><Spinner size="l" /></div>;
@@ -62,13 +46,42 @@ export function TeacherTests({ onNew, onOpen }: { onNew: () => void; onOpen: (id
             {c.name}
           </Cell>
         ))}
-        <Input value={name} placeholder="Новый класс, например 9А" maxLength={60} onChange={(e) => setName(e.target.value)} />
-        <div className="t-format">
-          <Button size="m" mode="bezeled" disabled={!name.trim() || busy} loading={busy} onClick={createClass}>
-            Создать класс
-          </Button>
-        </div>
+        <CreateClass onCreated={(created) => setClasses([...classes, created])} />
       </Section>
     </List>
+  );
+}
+
+/** Форма нового класса. Первый класс делает пользователя учителем. */
+export function CreateClass({ onCreated }: { onCreated: (created: SchoolClass) => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function create() {
+    setBusy(true);
+    setError('');
+    try {
+      const created = await api.teacher.createClass(name.trim());
+      notify('success');
+      setName('');
+      onCreated(created);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Input value={name} placeholder="Новый класс, например 9А" maxLength={60} onChange={(e) => setName(e.target.value)} />
+      <div className="t-format">
+        {error && <Caption className="error">{error}</Caption>}
+        <Button size="m" mode="bezeled" disabled={!name.trim() || busy} loading={busy} onClick={create}>
+          Создать класс
+        </Button>
+      </div>
+    </>
   );
 }

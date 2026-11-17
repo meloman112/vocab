@@ -139,6 +139,7 @@ export const REPORT_REASONS: Record<ReportReason, string> = {
 export interface Me {
   is_admin: boolean;
   is_teacher: boolean;
+  in_class?: boolean;
   grammar_done: number;
   grammar_wrong: number;
 }
