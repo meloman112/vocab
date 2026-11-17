@@ -24,7 +24,7 @@ router.callback_query.filter(F.message.chat.type.in_({"group", "supergroup"}))
 
 # Должно совпадать с api/groups.py: оба ответа «не найдено» различаются только текстом.
 UNBOUND = "группа не привязана к классу"
-UNBOUND_TEXT = "Группа не привязана к классу. Учитель: /bind"
+UNBOUND_TEXT = "Группа не привязана к классу. Привязать: /bind"
 JOIN_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎒 Я в классе", callback_data="join")]])
 RANGE = re.compile(r"(\d+)(?:\s*[-–]\s*(\d+))?")
 MAX_RANGE = 200
@@ -83,7 +83,7 @@ async def _bind(user: User, chat_id: int, title: str, api: VocabAPI, class_id: i
             JOIN_KEYBOARD)
 
 
-NOT_TEACHER = {403: "Привязать группу может только учитель."}
+TAKEN = {403: "Группа уже привязана к классу другого учителя."}
 
 
 @router.message(Command("bind"))
@@ -91,7 +91,7 @@ async def bind(message: Message, api: VocabAPI) -> None:
     try:
         text, keyboard = await _bind(message.from_user, message.chat.id, message.chat.title, api)
     except httpx.HTTPStatusError as exc:
-        await message.answer(_error_text(exc, NOT_TEACHER))
+        await message.answer(_error_text(exc, TAKEN))
         return
     await message.answer(text, reply_markup=keyboard)
 
@@ -103,7 +103,7 @@ async def bind_choice(callback: CallbackQuery, api: VocabAPI) -> None:
         text, keyboard = await _bind(callback.from_user, chat.id, chat.title, api,
                                      int(callback.data.split(":", 1)[1]))
     except httpx.HTTPStatusError as exc:
-        await callback.answer(_error_text(exc, NOT_TEACHER), show_alert=True)
+        await callback.answer(_error_text(exc, TAKEN), show_alert=True)
         return
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()

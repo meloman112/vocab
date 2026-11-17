@@ -504,16 +504,6 @@ class Teacher(BaseModel):
     name: str
 
 
-class Invite(BaseModel):
-    code: str
-    ttl_days: int
-
-
-class Redeemed(BaseModel):
-    # Кто выдал ссылку — бот скажет ему, что учитель появился.
-    inviter_tg_id: int | None
-
-
 # --- тесты учителя ---------------------------------------------------------------
 
 

@@ -35,10 +35,15 @@ def _item_count(exercises: list[int]) -> int:
 
 @router.post("/bind")
 async def bind(
-    chat_id: int, body: schemas.BindIn, request: Request, teacher_id: int = Depends(teacher_user)
+    chat_id: int, body: schemas.BindIn, request: Request, teacher_id: int = Depends(current_user)
 ) -> dict:
-    """Несколько классов и class_id не указан — привязки нет, в ответе список на выбор."""
+    """Несколько классов и class_id не указан — привязки нет, в ответе список на выбор.
+    Классов нет — создаётся новый, и привязавший становится учителем."""
     async with request.app.state.pool.acquire() as conn:
+        # Привязать может любой, поэтому чужую группу отнять нельзя.
+        bound = await repo.chat_class(conn, chat_id, teacher_id)
+        if bound is not None and bound["teacher_id"] != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "группа привязана к классу другого учителя")
         classes = await repo.teacher_classes(conn, teacher_id)
         if body.class_id is not None:
             chosen = next((c for c in classes if c["id"] == body.class_id), None)
