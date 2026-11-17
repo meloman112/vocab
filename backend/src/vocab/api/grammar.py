@@ -5,6 +5,7 @@ import logging
 import time
 from collections import defaultdict
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -145,11 +146,18 @@ async def send_pdf(
     document = await run_in_threadpool(pdf.render, who.name or "", exercises, summary)
     t2 = time.perf_counter()
     numbers = ", ".join(str(ex["id"]) for ex in exercises)
-    response = await request.app.state.telegram.post(
-        "/sendDocument",
-        data={"chat_id": who.tg_id, "caption": f"Упражнения {numbers}"},
-        files={"document": (f"workbook-{time.strftime('%Y-%m-%d')}.pdf", document, "application/pdf")},
-    )
+    try:
+        # 60 с, а не общие 30: 17.11 Telegram дважды подряд отвечал на sendDocument дольше 30 с.
+        response = await request.app.state.telegram.post(
+            "/sendDocument",
+            data={"chat_id": who.tg_id, "caption": f"Упражнения {numbers}"},
+            files={"document": (f"workbook-{time.strftime('%Y-%m-%d')}.pdf", document, "application/pdf")},
+            timeout=60,
+        )
+    except httpx.TimeoutException as exc:
+        # Файл мог и дойти: Telegram принял его, но не успел ответить.
+        raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT,
+                            "Telegram долго не отвечает. Проверь чат с ботом, если файла нет — отправь ещё раз") from exc
     t3 = time.perf_counter()
     # Где уходит время, видно в логе: db+annotate / сборка / Telegram.
     log.info("pdf %d упр., %d КБ: db %.0f мс, render %.0f мс, telegram %.0f мс",
