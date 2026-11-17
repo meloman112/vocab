@@ -20,15 +20,18 @@ const minutesLeft = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** Ученик: тесты от учителей его классов. openId — тест из сообщения бота. */
-export function TestsScreen({ openId, onExit }: { openId: number | null; onExit: () => void }) {
+/**
+ * Ученик: тесты от учителей его классов. openId — тест, открытый кнопкой
+ * «Продолжить» или из сообщения бота: «Назад» из него сразу зовёт onExit.
+ */
+export function TestsScreen({ openId, onExit }: { openId: number | null; onExit?: () => void }) {
   const [tests, setTests] = useState<StudentTest[] | null>(null);
   const [open, setOpen] = useState<number | null>(openId);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
 
   const close = useCallback(() => setOpen(null), []);
-  useBackButton(open !== null ? close : onExit);
+  useBackButton(open !== null && openId === null ? close : onExit ?? null);
 
   useEffect(() => {
     api.tests.list().then(setTests, (e: Error) => setError(e.message));

@@ -310,3 +310,31 @@ body {
   background: none;
   resize: vertical;
 }
+
+/* Панель вкладок висит поверх низа экрана: под ней последний пункт не прячется,
+   а экран с Placeholder не прокручивается на её высоту. */
+.tabs {
+  --tabbar: calc(84px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--tabbar);
+}
+
+.tabs .screen {
+  min-height: calc(100dvh - var(--tabbar));
+}
+
+/* Со штатными полями в 16px «Грамматика» на узком телефоне обрезается. */
+.tab {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+/* Шапка вкладки: заголовок, строка цифр и одна главная кнопка. */
+.tab-head {
+  display: grid;
+  gap: 8px;
+  padding: 16px 16px 0;
+}
+
+.tab-head__next {
+  text-align: center;
+}

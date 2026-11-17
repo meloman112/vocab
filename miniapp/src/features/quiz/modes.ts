@@ -20,7 +20,7 @@ const always = () => true;
 
 /** Порядок — от узнавания к воспроизведению: так меню читается как лестница. */
 export const MODES: Mode[] = [
-  { id: 'learn', icon: '🎓', title: 'Тренировка', subtitle: 'Каждое слово в разные стороны, пока не запомнишь',
+  { id: 'learn', icon: '🎓', title: 'Учить', subtitle: 'Каждое слово в разные стороны, пока не запомнишь',
     source: 'learn', recall: true, fits: hasRu },
   { id: 'en-ru', icon: '🔤', title: 'Выбери перевод', subtitle: 'Слово → один из 4 переводов',
     source: 'any', recall: false, fits: hasRu },

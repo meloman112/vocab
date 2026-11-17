@@ -18,8 +18,8 @@ type Tab = 'students' | 'common' | 'tests';
 type TestView = 'new' | number | null;
 
 /** Учитель: кто как сделал тетрадь, где ошибается класс, и тесты. */
-export function TeacherScreen({ onExit }: { onExit: () => void }) {
-  const [tab, setTab] = useState<Tab>('students');
+export function TeacherScreen({ startTab }: { startTab: Tab }) {
+  const [tab, setTab] = useState(startTab);
   const [testView, setTestView] = useState<TestView>(null);
   const [book, setBook] = useState<Book | null>(null);
   const [students, setStudents] = useState<Student[] | null>(null);
@@ -31,7 +31,7 @@ export function TeacherScreen({ onExit }: { onExit: () => void }) {
 
   const close = useCallback(() => setOpen(null), []);
   const closeTest = useCallback(() => setTestView(null), []);
-  useBackButton(testView !== null ? closeTest : open ? close : onExit);
+  useBackButton(testView !== null ? closeTest : open ? close : null);
 
   useEffect(() => {
     Promise.all([loadBook(), api.teacher.students(), api.teacher.common()]).then(

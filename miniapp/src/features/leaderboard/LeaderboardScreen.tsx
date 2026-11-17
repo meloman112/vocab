@@ -4,6 +4,7 @@ import {
   List,
   Placeholder,
   Section,
+  SegmentedControl,
   Spinner,
   Text,
 } from '@telegram-apps/telegram-ui';
@@ -13,18 +14,21 @@ import { api } from '../../api/client';
 import type { Leaderboard, LeaderRow } from '../../api/types';
 
 interface Props {
+  /** Ученику класса доступен ещё и рейтинг среди одноклассников. */
+  inClass: boolean;
   onBack: () => void;
 }
 
 const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
-export function LeaderboardScreen({ onBack }: Props) {
+export function LeaderboardScreen({ inClass, onBack }: Props) {
   const [board, setBoard] = useState<Leaderboard | null>(null);
   const [error, setError] = useState('');
+  const [scope, setScope] = useState<'global' | 'class'>('global');
 
   useEffect(() => {
-    api.leaderboard().then(setBoard, (e: Error) => setError(e.message));
-  }, []);
+    api.leaderboard(scope).then(setBoard, (e: Error) => setError(e.message));
+  }, [scope]);
 
   const back = (
     <Button size="l" mode="bezeled" onClick={onBack}>
@@ -48,6 +52,16 @@ export function LeaderboardScreen({ onBack }: Props) {
   // Кнопка вне List: внутри его flex-колонки она растягивается на всю высоту.
   return (
     <div className="screen">
+      {inClass && (
+        <SegmentedControl>
+          <SegmentedControl.Item selected={scope === 'global'} onClick={() => setScope('global')}>
+            Все
+          </SegmentedControl.Item>
+          <SegmentedControl.Item selected={scope === 'class'} onClick={() => setScope('class')}>
+            Мой класс
+          </SegmentedControl.Item>
+        </SegmentedControl>
+      )}
       <List>
         <Section header="Рейтинг недели" footer="10 XP за повторение. Обнуляется в понедельник.">
           {board.top.length === 0 && <Cell>Пока никого — будь первым</Cell>}

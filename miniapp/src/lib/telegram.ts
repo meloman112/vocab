@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 /**
  * Тонкая типизированная обёртка над window.Telegram.WebApp.
@@ -165,16 +165,39 @@ export function notify(type: NotificationType): void {
   webApp?.HapticFeedback.notificationOccurred(type);
 }
 
+let backHandlers = 0;
+const backListeners = new Set<() => void>();
+
+function countBack(delta: number): void {
+  backHandlers += delta;
+  backListeners.forEach((listener) => listener());
+}
+
+function subscribeBack(listener: () => void): () => void {
+  backListeners.add(listener);
+  return () => backListeners.delete(listener);
+}
+
 /** Системная «Назад» в шапке Telegram. Без обработчика кнопка скрыта. */
 export function useBackButton(onBack: (() => void) | null): void {
   useEffect(() => {
+    if (!onBack) return;
     const button = webApp?.BackButton;
-    if (!button || !onBack) return;
-    button.show();
-    button.onClick(onBack);
+    countBack(1);
+    button?.show();
+    button?.onClick(onBack);
     return () => {
-      button.offClick(onBack);
-      button.hide();
+      button?.offClick(onBack);
+      button?.hide();
+      countBack(-1);
     };
   }, [onBack]);
+}
+
+/**
+ * Есть ли сейчас «Назад». Её нет только на корне вкладки — там и живёт
+ * панель вкладок; внутри упражнения, теста или карточек панель прячется.
+ */
+export function useHasBack(): boolean {
+  return useSyncExternalStore(subscribeBack, () => backHandlers > 0);
 }
