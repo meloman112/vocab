@@ -43,6 +43,11 @@ interface TelegramWebApp {
   openTelegramLink(url: string): void;
   disableVerticalSwipes?(): void;
   enableVerticalSwipes?(): void;
+  onEvent(event: 'themeChanged', callback: () => void): void;
+  offEvent(event: 'themeChanged', callback: () => void): void;
+  setHeaderColor(color: string): void;
+  setBackgroundColor(color: string): void;
+  setBottomBarColor?(color: string): void;
 }
 
 declare global {
@@ -66,13 +71,41 @@ export function apiUrl(path: string): string {
   return new URL(path.slice(1), apiRoot).toString();
 }
 
-export const appearance: 'light' | 'dark' = webApp?.colorScheme ?? 'light';
+type Scheme = 'light' | 'dark';
+
+/** Цвет страницы в styles.css (--page): шапка и низ клиента сливаются с ней. */
+const PAGE: Record<Scheme, string> = { light: '#f6f1e7', dark: '#0d1326' };
+
+function scheme(): Scheme {
+  return webApp?.colorScheme ?? 'light';
+}
+
+/** Своя палитра вместо цветов Telegram, светлая или тёмная — как тема клиента. */
+function applyTheme(): void {
+  document.body.dataset.theme = scheme();
+  if (!webApp?.isVersionAtLeast('6.9')) return;
+  webApp.setHeaderColor(PAGE[scheme()]);
+  webApp.setBackgroundColor(PAGE[scheme()]);
+  if (webApp.isVersionAtLeast('7.10')) webApp.setBottomBarColor?.(PAGE[scheme()]);
+}
+
+function onTheme(callback: () => void): () => void {
+  webApp?.onEvent('themeChanged', callback);
+  return () => webApp?.offEvent('themeChanged', callback);
+}
+
+/** Тема клиента сейчас: пользователь может переключить её, не закрывая мини-апп. */
+export function useAppearance(): Scheme {
+  return useSyncExternalStore(onTheme, scheme);
+}
 
 /** telegram-ui различает всего два оформления; всё, кроме Apple, — base. */
 export const platform: 'base' | 'ios' =
   webApp?.platform === 'ios' || webApp?.platform === 'macos' ? 'ios' : 'base';
 
 export function initTelegram(): void {
+  applyTheme();
+  onTheme(applyTheme);
   webApp?.ready();
   webApp?.expand();
 }

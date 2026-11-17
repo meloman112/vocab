@@ -1,6 +1,6 @@
-/* Перевод выделенного: кнопка у слова и карточка снизу. Цвета — из темы Telegram. */
+/* Перевод выделенного: кнопка у слова и карточка снизу. Цвета — из палитры мини-аппа. */
 
-:root {
+.vocab {
   --tr-bg: var(--tg-theme-bg-color, #fff);
   --tr-ink: var(--tg-theme-text-color, #000);
   --tr-muted: var(--tg-theme-hint-color, #8a8a8e);

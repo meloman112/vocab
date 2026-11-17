@@ -14,7 +14,7 @@ import { useSummary } from './features/today/useSummary';
 import { SelectionTranslate } from './features/translate/SelectionTranslate';
 import { WordsScreen } from './features/words/WordsScreen';
 import { ErrorBoundary } from './lib/errors';
-import { appearance, platform, startScreen, startTestId, useBackButton, useHasBack } from './lib/telegram';
+import { platform, startScreen, startTestId, useAppearance, useBackButton, useHasBack } from './lib/telegram';
 
 const TABS = [
   { id: 'today', icon: '🏠', text: 'Сегодня' },
@@ -56,6 +56,7 @@ export function App() {
   // остаётся смонтированной, и «Назад» возвращает в то же место.
   const [showBoard, setShowBoard] = useState(false);
   const { summary, reload } = useSummary();
+  const appearance = useAppearance();
   // Панель вкладок — только на корне вкладки: внутри упражнения, теста и
   // карточек она отнимала бы место и уводила бы из сессии случайным тапом.
   const tabbar = !useHasBack() && !flow;
@@ -80,7 +81,7 @@ export function App() {
   }, [flow, tab]);
 
   return (
-    <AppRoot appearance={appearance} platform={platform}>
+    <AppRoot className="vocab" appearance={appearance} platform={platform}>
       {/* key — экран: ошибка одного раздела не держит сломанным остальные. */}
       <ErrorBoundary key={flow?.name ?? tab}>
         <div hidden={showBoard} className={tabbar ? 'tabs' : undefined}>
@@ -91,7 +92,7 @@ export function App() {
       {tabbar && (
         <Tabbar className="tabbar">
           {TABS.map((t) => (
-            <Tabbar.Item key={t.id} className="tab" text={t.text} selected={tab === t.id} onClick={() => setTab(t.id)}>
+            <Tabbar.Item key={t.id} className={tab === t.id ? 'tab tab--on' : 'tab'} text={t.text} selected={tab === t.id} onClick={() => setTab(t.id)}>
               <span className="icon">{t.icon}</span>
             </Tabbar.Item>
           ))}

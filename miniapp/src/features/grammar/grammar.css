@@ -1,10 +1,10 @@
 /*
  * Тетрадь: лист с полями, синяя ручка ученика, красная — учителя.
- * Цвета — из темы Telegram, как во всём мини-аппе: тёмная тема сама.
+ * Цвета — из палитры мини-аппа (styles.css), тёмная тема сама.
  */
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap');
 
-:root {
+.vocab {
   --g-bg: var(--tg-theme-bg-color, #fff);
   --g-ink: var(--tg-theme-text-color, #000);
   --g-muted: var(--tg-theme-hint-color, #8a8a8e);

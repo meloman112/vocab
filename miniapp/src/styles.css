@@ -1,13 +1,94 @@
 /*
- * Цвета берутся только из переменных Telegram: тема подхватывается сама,
- * включая ту, которую пользователь поставил в клиенте вручную.
- * telegram-ui объявляет их сам, здесь только раскладка.
+ * Палитра сайта: бумага, чернила, жёлтый маркер. Две темы — по теме клиента
+ * (body[data-theme] ставит lib/telegram). Переменные Telegram переопределены
+ * на body: на них держатся telegram-ui и стили экранов.
  */
 
 body {
   margin: 0;
-  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-  color: var(--tg-theme-text-color, #000);
+  background: var(--page);
+  color: var(--tg-theme-text-color);
+  font-family: Manrope, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body,
+body[data-theme='light'] {
+  --page: #f6f1e7;
+  --ink: #172554;
+  --marker: #ffd84d;
+  --line: #e7dfcf;
+  --tg-theme-bg-color: #fffdf8;
+  --tg-theme-secondary-bg-color: var(--page);
+  --tg-theme-section-bg-color: #fffdf8;
+  --tg-theme-header-bg-color: var(--page);
+  --tg-theme-text-color: #1f2937;
+  --tg-theme-hint-color: #7a7468;
+  --tg-theme-subtitle-text-color: #7a7468;
+  --tg-theme-section-header-text-color: #8a7f6a;
+  --tg-theme-link-color: #2563eb;
+  --tg-theme-accent-text-color: #2563eb;
+  --tg-theme-button-color: #2563eb;
+  --tg-theme-button-text-color: #fff;
+  --tg-theme-destructive-text-color: #e5484d;
+  --shadow: 0 12px 28px -20px rgb(23 37 84 / 0.4);
+}
+
+body[data-theme='dark'] {
+  --page: #0d1326;
+  --ink: #f6f1e7;
+  --line: #222c4a;
+  --tg-theme-bg-color: #161f3a;
+  --tg-theme-section-bg-color: #161f3a;
+  --tg-theme-text-color: #e9e6de;
+  --tg-theme-hint-color: #8f99b3;
+  --tg-theme-subtitle-text-color: #8f99b3;
+  --tg-theme-section-header-text-color: #8f99b3;
+  --tg-theme-link-color: #8db4ff;
+  --tg-theme-accent-text-color: var(--marker);
+  --tg-theme-button-color: var(--marker);
+  --tg-theme-button-text-color: #172554;
+  --tg-theme-destructive-text-color: #ff6b6e;
+  --shadow: none;
+}
+
+/* Значения, которые telegram-ui задаёт сам, без переменных Telegram.
+   Двойной класс перебивает его одиночный. */
+.vocab.vocab {
+  --tgui--font-family: Manrope, system-ui, sans-serif;
+  --tgui--font_weight--accent1: 800;
+  --tgui--font_weight--accent2: 700;
+  --tgui--card_bg_color: var(--tg-theme-section-bg-color);
+  --tgui--tertiary_bg_color: var(--page);
+  --tgui--quartenary_bg_color: var(--page);
+  --tgui--segmented_control_active_bg: var(--tg-theme-section-bg-color);
+  --tgui--secondary_fill: color-mix(in srgb, var(--tg-theme-button-color) 14%, transparent);
+  --tgui--divider: var(--line);
+  --tgui--outline: var(--line);
+  --tgui--plain_background: color-mix(in srgb, var(--tg-theme-text-color) 6%, transparent);
+}
+
+/* Секции — карточками с отступом, как блоки сайта; подпись секции остаётся
+   под карточкой. Класс — тело Section в telegram-ui 2.1.13 (версия закреплена):
+   у Section нет пропа для него, а тег section есть и у Placeholder. */
+.vocab .tgui-db9be63c4fecf79b {
+  margin: 0 12px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+/* hr по умолчанию рисует рамку «inset» двумя оттенками. */
+.vocab hr {
+  border-style: solid;
+}
+
+/* Заголовки — шрифтом сайта, цветом чернил. */
+.vocab :is(h1, h2, h3) {
+  font-family: Unbounded, Manrope, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 
 .screen {
@@ -326,6 +407,9 @@ body {
    на скруглённый край и тап по ним не попадал. Telegram отдаёт отступ своей
    переменной, браузер — env(); берём больший. */
 .tabbar {
+  background: color-mix(in srgb, var(--tg-theme-section-bg-color) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -1px 0 var(--line);
   --bottom-inset: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
   padding-bottom: max(var(--bottom-inset), 8px);
 }
@@ -334,13 +418,35 @@ body {
 .tab {
   min-height: 60px;
   padding: 10px 2px 6px;
+  color: var(--tg-theme-hint-color);
+}
+
+/* Выбранная вкладка: плашка маркера под иконкой, подпись чернилами. */
+.tab--on {
+  --tgui--link_color: var(--ink);
+  --tgui--secondary_fill: var(--marker);
+}
+
+body[data-theme='dark'] .tab--on {
+  --tgui--secondary_fill: color-mix(in srgb, var(--marker) 30%, transparent);
 }
 
 /* Шапка вкладки: заголовок, строка цифр и одна главная кнопка. */
 .tab-head {
   display: grid;
-  gap: 8px;
-  padding: 16px 16px 0;
+  gap: 10px;
+  padding: 20px 16px 4px;
+}
+
+/* Подчёркивание маркером, как «mark» на сайте. */
+.tab-head > :first-child {
+  justify-self: start;
+  padding: 0 0.08em;
+  background: linear-gradient(transparent 60%, var(--marker) 60%, var(--marker) 92%, transparent 92%);
+}
+
+body[data-theme='dark'] .tab-head > :first-child {
+  background: linear-gradient(transparent 60%, color-mix(in srgb, var(--marker) 45%, transparent) 60%, color-mix(in srgb, var(--marker) 45%, transparent) 92%, transparent 92%);
 }
 
 .tab-head__next {
