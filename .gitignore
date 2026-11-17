@@ -14,3 +14,6 @@ backend/src/vocab/api/static/
 
 # Собранное расширение — тоже артефакт, собирается make xpi.
 vocab.xpi
+
+# Собранный сайт — артефакт, собирается make site.
+site/dist/
