@@ -507,6 +507,9 @@ make site         # статический сайт для поиска → site
 `_aral-challenge.vocab` для подтверждения домена). Выкладка:
 `python3 site/build.py && aral site deploy vocab site/dist`; откат —
 `aral site activate vocab --deploy-id <id>` (`aral site deploys vocab`).
+После выкладки новой страницы — пинг IndexNow (Яндекс, Bing): ключ в
+`site/indexnow.key`, файл `<ключ>.txt` кладёт `build.py`;
+`curl -d '{"host":"vocab.blick.uz","key":"<ключ>","urlList":["https://vocab.blick.uz/"]}' -H 'Content-Type: application/json' https://yandex.com/indexnow`.
 
 Тестов намеренно мало: проверяются подпись initData и перекладывание полей
 FSRS — то, что ломается молча. Остальное покрывает `make smoke` на живом

@@ -79,6 +79,9 @@ def main():
     shutil.rmtree(DIST, ignore_errors=True)
     DIST.mkdir()
     (DIST / "index.html").write_text(html, encoding="utf-8")
+    # IndexNow (Яндекс, Bing): поисковик сверяет ключ из запроса с этим файлом.
+    key = (SITE / "indexnow.key").read_text(encoding="utf-8").strip()
+    (DIST / f"{key}.txt").write_text(key, encoding="utf-8")
     (DIST / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml\n", encoding="utf-8")
     (DIST / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
