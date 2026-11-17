@@ -503,7 +503,8 @@ make site         # статический сайт для поиска → site
 Шрифты — Google Fonts.
 
 Хостинг — статический сайт `vocab` в Aral Cloud на `https://vocab.blick.uz`
-(зона `vocab.blick.uz` в Aral DNS, делегирована с airnet). Выкладка:
+(DNS `blick.uz` на airnet: CNAME `vocab` → `edge.aralcloud.uz` и TXT
+`_aral-challenge.vocab` для подтверждения домена). Выкладка:
 `python3 site/build.py && aral site deploy vocab site/dist`; откат —
 `aral site activate vocab --deploy-id <id>` (`aral site deploys vocab`).
 
