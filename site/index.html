@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{NAME}} — английский в Telegram. Бесплатно</title>
+<meta name="description" content="Тетрадь по грамматике, которая объясняет каждую ошибку, слова на интервальное повторение и класс для учителя — в одном Telegram-боте. Бесплатно, без подписок и рекламы.">
+<link rel="canonical" href="{{SITE_URL}}/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{NAME}} — английский в Telegram">
+<meta property="og:description" content="Грамматика с разбором ошибок, слова и тесты для класса. Бесплатно.">
+<meta property="og:url" content="{{SITE_URL}}/">
+<meta name="theme-color" content="#f6f1e7">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23172554'/%3E%3Cpath d='M9 17l5 5 9-11' fill='none' stroke='%23ffd84d' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"{{NAME}}","url":"{{SITE_URL}}/","inLanguage":"ru"}</script>
+<style>
+:root {
+  --paper: #f6f1e7;
+  --card: #fffdf8;
+  --ink: #172554;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --line: #e7dfcf;
+  --blue: #2563eb;
+  --red: #e5484d;
+  --green: #16a34a;
+  --marker: #ffd84d;
+  --radius: 24px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font: 17px/1.55 Manrope, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: Unbounded, Manrope, sans-serif; color: var(--ink); line-height: 1.1; margin: 0; }
+p { margin: 0; }
+a { color: inherit; }
+.wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+
+/* --- шапка --- */
+.top { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.logo { display: flex; align-items: center; gap: 10px; font: 800 18px Unbounded, sans-serif; color: var(--ink); text-decoration: none; }
+.logo i { width: 34px; height: 34px; border-radius: 10px; background: var(--ink); display: grid; place-items: center; }
+.logo i::after { content: ""; width: 14px; height: 8px; border: solid var(--marker); border-width: 0 0 3.5px 3.5px; transform: translateY(-2px) rotate(-45deg); }
+.top .btn { padding: 10px 18px; font-size: 15px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 28px; border-radius: 999px;
+  font: 700 17px Manrope, sans-serif; text-decoration: none;
+  color: #fff; background: var(--blue);
+  box-shadow: 0 10px 24px -10px rgb(37 99 235 / .7);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -10px rgb(37 99 235 / .8); }
+.btn svg { width: 20px; height: 20px; }
+
+/* --- первый экран --- */
+.hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding: 40px 0 80px; }
+.hero h1 { font-size: clamp(38px, 6vw, 68px); font-weight: 800; letter-spacing: -.02em; }
+.mark { background: linear-gradient(transparent 58%, var(--marker) 58%, var(--marker) 92%, transparent 92%); padding: 0 .08em; }
+.hero .lead { margin: 24px 0 32px; font-size: 20px; max-width: 30em; color: #374151; }
+.free { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 22px; font-size: 15px; color: var(--muted); }
+.free span::before { content: "✓ "; color: var(--green); font-weight: 800; }
+
+/* телефон с тетрадью */
+.phone {
+  justify-self: center; width: min(340px, 100%);
+  padding: 14px; border-radius: 44px; background: #0f172a;
+  box-shadow: 0 40px 80px -30px rgb(15 23 42 / .55);
+  transform: rotate(2deg);
+}
+.screen {
+  border-radius: 32px; padding: 22px 18px 26px; min-height: 520px;
+  background: var(--card) repeating-linear-gradient(transparent 0 35px, #e8eefc 35px 36px);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.screen .bar { font: 700 13px Manrope; color: var(--muted); display: flex; justify-content: space-between; }
+.sent { font-size: 18px; line-height: 36px; color: var(--ink); }
+.slot { display: inline-block; min-width: 96px; border-bottom: 2px solid var(--blue); color: var(--blue); font-weight: 700; text-align: center; position: relative; }
+.slot s { color: var(--red); text-decoration-thickness: 2px; }
+.fix { color: var(--green); font-weight: 800; margin-left: 6px; }
+.why {
+  background: #fff4f4; border: 1.5px solid #ffd2d3; border-radius: 16px; padding: 12px 14px;
+  font-size: 14.5px; line-height: 1.45;
+}
+.why b { color: var(--red); display: block; margin-bottom: 2px; }
+.rule { background: #eef4ff; border-radius: 16px; padding: 12px 14px; font-size: 14px; color: var(--ink); }
+.rule code { font: 700 14px Manrope; background: var(--marker); padding: 1px 6px; border-radius: 6px; }
+.tabs { margin-top: auto; display: flex; justify-content: space-around; font-size: 12px; color: var(--muted); text-align: center; }
+.tabs span { display: grid; gap: 2px; }
+.tabs span:first-child { color: var(--blue); }
+.tabs em { font-style: normal; font-size: 20px; }
+
+/* --- общие секции --- */
+section { padding: 72px 0; }
+.kicker { font: 700 14px Manrope; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); margin-bottom: 14px; }
+.title { font-size: clamp(30px, 4.2vw, 46px); font-weight: 800; letter-spacing: -.015em; max-width: 18em; }
+.sub { margin-top: 16px; font-size: 19px; color: #4b5563; max-width: 34em; }
+
+/* три возможности */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px; }
+.feature { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; display: flex; flex-direction: column; gap: 14px; }
+.feature h3 { font-size: 22px; }
+.feature p { color: #4b5563; font-size: 16px; }
+.demo { margin-top: auto; border-radius: 18px; padding: 16px; min-height: 150px; display: grid; align-content: center; gap: 10px; }
+.demo--grammar { background: #fff4d6; }
+.demo--words { background: #e7f6ec; }
+.demo--class { background: #e9efff; }
+.flash { background: #fff; border-radius: 14px; padding: 14px; text-align: center; box-shadow: 0 6px 16px -10px rgb(0 0 0 / .3); }
+.flash b { font: 800 22px Unbounded, sans-serif; color: var(--ink); display: block; }
+.flash small { color: var(--muted); }
+.pair { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; font-size: 13.5px; }
+.pair span { background: #fff; border-radius: 999px; padding: 4px 10px; font-weight: 700; color: #166534; }
+.mini-sent { background: #fff; border-radius: 14px; padding: 12px; font-size: 15px; color: var(--ink); }
+.mini-sent s { color: var(--red); }
+.mini-sent b { color: var(--green); }
+.timer { background: var(--ink); color: #fff; border-radius: 12px; padding: 8px 12px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 6px; justify-content: center; }
+.dots i { width: 26px; height: 26px; border-radius: 8px; border: 2px solid #c7d2fe; background: #fff; font: 700 12px/22px Manrope; font-style: normal; text-align: center; color: #6366f1; }
+.dots i.ok { border-color: var(--green); color: var(--green); }
+.dots i.now { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* цифры */
+.numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 36px; margin-top: 8px; border-radius: var(--radius); background: var(--ink); color: #fff; }
+.numbers b { display: block; font: 800 clamp(26px, 4vw, 44px) Unbounded, sans-serif; color: var(--marker); white-space: nowrap; }
+.numbers span { color: #cbd5e1; font-size: 15px; }
+
+/* шаги */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 40px; counter-reset: step; }
+.step { padding: 26px; border-radius: var(--radius); border: 2px dashed #d6ccb6; }
+.step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--marker); font: 800 18px Unbounded; color: var(--ink); margin-bottom: 16px; }
+.step h3 { font-size: 19px; margin-bottom: 8px; }
+.step p { color: #4b5563; font-size: 16px; }
+
+/* учителю */
+.teacher { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 32px; padding: 48px; }
+.teacher .title { font-size: clamp(26px, 3.2vw, 36px); }
+.checks { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 14px; }
+.checks li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; font-size: 16.5px; }
+.checks li::before { content: "✓"; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #dcfce7; color: var(--green); font-weight: 800; font-size: 14px; }
+.report { background: var(--paper); border-radius: 22px; padding: 22px; display: grid; gap: 12px; }
+.report h4 { margin: 0; font: 800 16px Unbounded; color: var(--ink); }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; font-size: 15px; }
+.meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 4px; background: var(--green); }
+.meter i.warn { background: #f59e0b; }
+.meter i.bad { background: var(--red); }
+.report small { color: var(--muted); }
+
+/* финал */
+.final { text-align: center; padding: 96px 0; }
+.final .title { margin: 0 auto; }
+.final .sub { margin: 18px auto 34px; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 14.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+/* появление при прокрутке */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .btn, html { transition: none; scroll-behavior: auto; }
+}
+
+@media (max-width: 900px) {
+  .hero, .teacher { grid-template-columns: 1fr; }
+  .hero { padding-top: 16px; gap: 40px; }
+  .features, .steps { grid-template-columns: 1fr; }
+  .numbers { grid-template-columns: repeat(2, 1fr); padding: 26px; }
+  .teacher { padding: 28px 20px; gap: 32px; }
+  section { padding: 56px 0; }
+  .phone { transform: none; }
+}
+@media (max-width: 420px) {
+  .top .btn { display: none; }
+  .btn { width: 100%; justify-content: center; }
+  .screen { min-height: 470px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="logo" href="./"><i></i>{{NAME}}</a>
+    <a class="btn" href="{{BOT_URL}}">Открыть бота</a>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <h1>Английский, который <span class="mark">объясняет ошибки</span></h1>
+        <p class="lead">Грамматика, слова и тесты класса — в одном Telegram-боте. Не просто «неверно», а почему и как правильно.</p>
+        <a class="btn" href="{{BOT_URL}}">{{TG_ICON}} Начать в Telegram</a>
+        <div class="free"><span>Бесплатно</span><span>Без подписок</span><span>Без рекламы</span></div>
+      </div>
+
+      <div class="phone" aria-hidden="true">
+        <div class="screen">
+          <div class="bar"><span>📒 Past Simple</span><span>Упр. 4 · 3/10</span></div>
+          <p class="sent">Mr Brown <span class="slot"><s>repairs</s></span><span class="fix">repaired</span> his bike yesterday morning.</p>
+          <div class="why"><b>Не то время</b>«yesterday» — действие закончилось в прошлом. Нужен Past Simple.</div>
+          <div class="rule">Формула: <code>V2</code> или <code>did + V</code></div>
+          <p class="sent">She <span class="slot">has broken</span> her phone screen.</p>
+          <nav class="tabs"><span><em>🏠</em>Сегодня</span><span><em>📒</em>Грамматика</span><span><em>🧠</em>Слова</span><span><em>👩‍🏫</em>Класс</span></nav>
+        </div>
+      </div>
+    </div>
+
+    <section id="what">
+      <p class="kicker reveal">Что внутри</p>
+      <h2 class="title reveal">Три вещи, которые нужны каждый день</h2>
+      <div class="features">
+        <article class="feature reveal">
+          <h3>📒 Грамматика</h3>
+          <p>Тетрадь по темам: от Present Simple до Conditionals. Бот находит ошибку и показывает правило рядом.</p>
+          <div class="demo demo--grammar">
+            <div class="mini-sent">I <s>am cook</s> <b>am cooking</b> pasta.</div>
+            <div class="mini-sent">Нет формы <b>-ing</b>: am / is / are + V-ing</div>
+          </div>
+        </article>
+        <article class="feature reveal">
+          <h3>🧠 Слова</h3>
+          <p>Пришли слово в любой форме — бот даст перевод и примеры, а потом напомнит, когда пора повторить.</p>
+          <div class="demo demo--words">
+            <div class="flash"><b>wear</b><small>носить (одежду)</small></div>
+            <div class="pair"><span>не путай:</span><span>carry</span><span>put on</span></div>
+          </div>
+        </article>
+        <article class="feature reveal">
+          <h3>👩‍🏫 Класс</h3>
+          <p>Учитель создаёт класс, даёт тесты на дом или на урок и видит, кто где ошибся.</p>
+          <div class="demo demo--class">
+            <div class="timer">⏱ Осталось 12:40</div>
+            <div class="dots"><i class="ok">1</i><i class="ok">2</i><i class="now">3</i><i>4</i><i>5</i></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div class="numbers reveal">
+      <div><b>{{TOPICS}}</b><span>тем грамматики</span></div>
+      <div><b>{{EXERCISES}}</b><span>упражнений</span></div>
+      <div><b>{{WORDS}}</b><span>слов в словаре</span></div>
+      <div><b>0</b><span>платежей и рекламы</span></div>
+    </div>
+
+    <section id="start">
+      <p class="kicker reveal">Как начать</p>
+      <h2 class="title reveal">Минута — и вы занимаетесь</h2>
+      <div class="steps">
+        <div class="step reveal"><h3>Откройте бота</h3><p>Нажмите «Запустить» в @{{BOT}}. Регистрации нет.</p></div>
+        <div class="step reveal"><h3>Выберите роль</h3><p>«Я учусь» — сразу к упражнениям. «Я преподаю» — создать класс.</p></div>
+        <div class="step reveal"><h3>10 минут в день</h3><p>Бот напомнит, когда пора повторить слова, и сохранит серию дней.</p></div>
+      </div>
+    </section>
+
+    <section id="teacher">
+      <div class="teacher">
+        <div>
+          <p class="kicker reveal">Учителю</p>
+          <h2 class="title reveal">Класс в Telegram без таблиц и проверки тетрадей</h2>
+          <ul class="checks">
+            <li class="reveal">Класс за минуту: ученики входят по одной ссылке</li>
+            <li class="reveal">Тест на дом со сроком или на урок с таймером</li>
+            <li class="reveal">Готовую контрольную из Word разберёт ИИ</li>
+            <li class="reveal">Видно, кто что сдал и где ошибся весь класс</li>
+          </ul>
+        </div>
+        <div class="report reveal" aria-hidden="true">
+          <h4>Контрольная: времена</h4>
+          <small>Класс 9А · сдали 18 из 20 · средний балл 81%</small>
+          <div class="row"><span>1. She ___ (not like) coffee.</span><b>94%</b><div class="meter"><i style="width:94%"></i></div></div>
+          <div class="row"><span>2. I ___ (live) here for years.</span><b>61%</b><div class="meter"><i class="warn" style="width:61%"></i></div></div>
+          <div class="row"><span>3. If he ___ (come), call me.</span><b>38%</b><div class="meter"><i class="bad" style="width:38%"></i></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="final">
+      <h2 class="title reveal">Попробуйте прямо сейчас</h2>
+      <p class="sub reveal">Бесплатно для всех: учеников, учителей и тех, кто учит сам.</p>
+      <a class="btn reveal" href="{{BOT_URL}}">{{TG_ICON}} Открыть @{{BOT}}</a>
+    </div>
+  </main>
+
+  <footer>
+    <span>Материалы и упражнения: {{AUTHOR}}</span>
+    <span>{{NAME}} · бесплатно, без подписок и рекламы</span>
+  </footer>
+</div>
+<script>
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { threshold: .15 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+</body>
+</html>
