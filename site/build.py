@@ -77,7 +77,8 @@ def main():
         "TOPICS": str(len(topics)), "EXERCISES": str(sum(len(t["exercises"]) for t in topics)),
     })
     shutil.rmtree(DIST, ignore_errors=True)
-    DIST.mkdir()
+    # site/public — файлы как есть: подтверждения поисковиков.
+    shutil.copytree(SITE / "public", DIST)
     (DIST / "index.html").write_text(html, encoding="utf-8")
     # IndexNow (Яндекс, Bing): поисковик сверяет ключ из запроса с этим файлом.
     key = (SITE / "indexnow.key").read_text(encoding="utf-8").strip()
