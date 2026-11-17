@@ -502,6 +502,11 @@ make site         # статический сайт для поиска → site
 `NAME`, `AUTHOR`, `WORDS`) и кладёт рядом robots.txt и sitemap.xml.
 Шрифты — Google Fonts.
 
+Хостинг — статический сайт `vocab` в Aral Cloud на `https://vocab.blick.uz`
+(зона `vocab.blick.uz` в Aral DNS, делегирована с airnet). Выкладка:
+`python3 site/build.py && aral site deploy vocab site/dist`; откат —
+`aral site activate vocab --deploy-id <id>` (`aral site deploys vocab`).
+
 Тестов намеренно мало: проверяются подпись initData и перекладывание полей
 FSRS — то, что ломается молча. Остальное покрывает `make smoke` на живом
 контуре.

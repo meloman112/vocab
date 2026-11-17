@@ -1,6 +1,6 @@
 """Лендинг: site/index.html с подставленными адресом, ботом и цифрами тетради → site/dist/.
 
-Только стандартная библиотека. Название и домен ещё поменяются — берутся из окружения.
+Только стандартная библиотека. Адрес, бот и название можно переопределить окружением.
 """
 
 import json
@@ -9,9 +9,9 @@ import shutil
 from html import escape
 from pathlib import Path
 
-SITE_URL = os.environ.get("SITE_URL", "https://example.com").rstrip("/")
+SITE_URL = os.environ.get("SITE_URL", "https://vocab.blick.uz").rstrip("/")
 BOT = os.environ.get("BOT", "workbookonlinebot")
-NAME = os.environ.get("NAME", "Work book")
+NAME = os.environ.get("NAME", "Vocab")
 AUTHOR = os.environ.get("AUTHOR", "учитель Байрам")
 # Словарь растёт сам: в базе ~10 500 слов на 17.11.2026, округляем вниз.
 WORDS = os.environ.get("WORDS", "10 000+")
