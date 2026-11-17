@@ -91,6 +91,12 @@ export const startScreen = query.get('screen') ?? (paramTest ? 'test' : startPar
 export const startTestId = Number(query.get('id') ?? paramTest?.[1]) || null;
 
 /** Окно «Переслать» Telegram: учитель отправляет ссылку класса в чат. */
+/** t.me-ссылка внутри Telegram; вне его (отладка в браузере) — новой вкладкой. */
+export function openTelegram(url: string): void {
+  if (webApp) return webApp.openTelegramLink(url);
+  window.open(url, '_blank');
+}
+
 export function shareLink(url: string, text: string): void {
   const share = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
   webApp?.openTelegramLink(share);

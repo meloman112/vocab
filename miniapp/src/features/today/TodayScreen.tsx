@@ -1,6 +1,6 @@
 import { Badge, Button, Caption, Cell, List, Section, Text, Title } from '@telegram-apps/telegram-ui';
 
-import { AUTHOR_CREDIT } from '../../lib/about';
+import { Authors } from '../../lib/about';
 import { deadline } from '../tests/TestsScreen';
 import type { Summary } from './useSummary';
 
@@ -75,7 +75,7 @@ export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLe
           </Section>
         )}
 
-        <Section footer={`${AUTHOR_CREDIT}. Бесплатно, без подписок и рекламы.`}>
+        <Section footer={<Authors />}>
           <Cell before={<Icon>🏆</Icon>} onClick={onLeaderboard}>
             Рейтинг недели
           </Cell>
