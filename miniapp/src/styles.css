@@ -346,3 +346,9 @@ body {
 .tab-head__next {
   text-align: center;
 }
+
+/* Ссылки на авторов — цветом ссылок темы, без подчёркивания браузера. */
+.authors a {
+  color: var(--tg-theme-link-color, #2481cc);
+  text-decoration: none;
+}

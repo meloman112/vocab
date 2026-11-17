@@ -75,7 +75,7 @@ export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLe
           </Section>
         )}
 
-        <Section footer={<Authors />}>
+        <Section footer={<Section.Footer className="authors"><Authors /></Section.Footer>}>
           <Cell before={<Icon>🏆</Icon>} onClick={onLeaderboard}>
             Рейтинг недели
           </Cell>
