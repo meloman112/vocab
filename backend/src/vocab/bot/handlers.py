@@ -324,6 +324,13 @@ async def add_suggestion(callback: CallbackQuery, api: VocabAPI, widgets: Widget
     await add_and_reply(callback.message, callback.from_user.id, api, widgets, callback.data[4:])
 
 
+@router.callback_query(F.data == "wod:off")
+async def stop_word_of_day(callback: CallbackQuery, api: VocabAPI) -> None:
+    await api.stop_word_of_day(callback.from_user.id)
+    await callback.answer("Больше не пришлю")
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+
 @router.callback_query(F.data.startswith("asis:"))
 async def add_as_is(callback: CallbackQuery, api: VocabAPI, widgets: Widgets) -> None:
     await callback.answer()

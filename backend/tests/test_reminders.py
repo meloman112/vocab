@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from vocab.api.routes import at_local_hours
-from vocab.bot.reminders import digest_text, reminder_text
+from vocab.bot.reminders import digest_text, reminder_text, word_of_day_text
 
 
 def target(gap, due=5, streak=3):
@@ -77,3 +77,12 @@ def test_half_hour_zone_is_reminded_once_within_its_hour():
     assert at_local_hours(rows, [9], datetime(2026, 1, 15, 3, 0, tzinfo=UTC)) == []
     assert at_local_hours(rows, [9], datetime(2026, 1, 15, 4, 0, tzinfo=UTC)) == [(rows[0], 9)]
     assert at_local_hours(rows, [9], datetime(2026, 1, 15, 5, 0, tzinfo=UTC)) == []
+
+
+def test_word_of_day_marks_word_in_sentence():
+    text = word_of_day_text({
+        "lemma": "evidence", "ipa": "", "translation": "доказательство", "exercise": 126,
+        "en": "Having no evidence, he stayed <silent>.", "ru": "Не имея доказательств, он промолчал.",
+    })
+    assert "<i>Having no <b>evidence</b>, he stayed &lt;silent&gt;.</i>" in text
+    assert "[" not in text.splitlines()[0]

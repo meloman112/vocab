@@ -25,6 +25,10 @@ class Item:
     slots: int
     topic: str
     text: str
+    # Предложение с основным ответом, его перевод и разбор — из notes упражнения.
+    en: str
+    ru: str
+    why: str
 
 
 @dataclass(frozen=True)
@@ -47,10 +51,11 @@ def content() -> Content:
     for topic in data["topics"]:
         for ex in topic["exercises"]:
             exercises[ex["id"]] = ex["task"]
-            for i, text in enumerate(ex["items"]):
+            for i, (text, note) in enumerate(zip(ex["items"], ex["notes"], strict=True)):
                 # Ключ — как в прежнем мини-аппе: упражнение и индекс с нуля.
                 key = f"{ex['id']}-{i}"
-                items[key] = Item(key, ex["id"], i + 1, len(SLOT.findall(text)), topic["id"], text)
+                items[key] = Item(key, ex["id"], i + 1, len(SLOT.findall(text)), topic["id"], text,
+                                  note["en"], note["ru"], note["why"])
     # Отдаём одними и теми же байтами: ETag избавляет телефон от повторной
     # загрузки ~400 КБ при каждом открытии тетради.
     etag = '"' + hashlib.sha256(raw).hexdigest()[:16] + '"'

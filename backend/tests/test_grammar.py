@@ -39,4 +39,4 @@ def test_every_item_has_a_note():
     for topic in data["topics"]:
         for ex in topic["exercises"]:
             assert len(ex["notes"]) == len(ex["items"]), ex["id"]
-            assert all(n["ru"] and n["why"] for n in ex["notes"]), ex["id"]
+            assert all(n["en"] and n["ru"] and n["why"] for n in ex["notes"]), ex["id"]

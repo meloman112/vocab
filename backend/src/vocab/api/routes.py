@@ -2,12 +2,13 @@
 
 import logging
 import random
+import re
 from datetime import UTC, datetime
 from html import escape
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 
 from .. import dictionary, enrich, grammar, lexicon, quiz, repo, srs
 from ..config import settings
@@ -225,29 +226,105 @@ FEEDBACK_TITLES = {"review": "💬 Отзыв", "idea": "💡 Предложен
 
 @router.post("/feedback", status_code=status.HTTP_204_NO_CONTENT)
 async def post_feedback(
-    body: schemas.Feedback, request: Request, who: Identity = Depends(identity)
+    body: schemas.Feedback, request: Request, background: BackgroundTasks,
+    who: Identity = Depends(identity), user_id: int = Depends(current_user),
 ) -> None:
-    """Отзыв, идея или ошибка — админам в личку от бота: в базе их не
-    разбирать, а ответить автору можно сразу, по ссылке на него."""
-    author = escape(who.name or str(who.tg_id))
-    lines = [f'{FEEDBACK_TITLES[body.kind]} от <a href="tg://user?id={who.tg_id}">{author}</a>']
+    """Отзыв, идея или ошибка — админам в личку от бота. Сообщение уходит
+    сразу, а черновик ответа ИИ пишет следом: ученик его не ждёт."""
+    item = None
     if body.item:
         item = grammar.content().items.get(body.item)
         if item is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"задания {body.item} нет в тетради")
+    text = body.text.strip()
+    async with request.app.state.pool.acquire() as conn:
+        feedback_id = await repo.add_feedback(conn, user_id, body.kind, text, body.item)
+    author = escape(who.name or str(who.tg_id))
+    lines = [f'{FEEDBACK_TITLES[body.kind]} #{feedback_id} от <a href="tg://user?id={who.tg_id}">{author}</a>']
+    if item:
         lines.append(f"Упражнение {item.exercise}, № {item.n}: <i>{escape(grammar.plain(item.text))}</i>")
-    lines.append(escape(body.text.strip()))
-    delivered = 0
+    lines.append(escape(text))
+    sent = await _to_admins(request, {"text": "\n\n".join(lines), "parse_mode": "HTML"})
+    if not sent:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Не отправилось, попробуй ещё раз")
+    background.add_task(_offer_reply, request, feedback_id, _about(body.kind, text, item), sent)
+
+
+async def _to_admins(request: Request, message: dict) -> dict[int, int]:
+    """Сообщение каждому админу; вернёт, кому дошло: чат → id сообщения."""
+    sent = {}
     for chat_id in settings().admins:
-        answer = (await request.app.state.telegram.post(
-            "/sendMessage", json={"chat_id": chat_id, "text": "\n\n".join(lines), "parse_mode": "HTML"},
-        )).json()
+        answer = (await request.app.state.telegram.post("/sendMessage", json={"chat_id": chat_id, **message})).json()
         if answer.get("ok"):
-            delivered += 1
+            sent[chat_id] = answer["result"]["message_id"]
         else:
             log.warning("отзыв не дошёл до админа %s: %s", chat_id, answer.get("description"))
-    if not delivered:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Не отправилось, попробуй ещё раз")
+    return sent
+
+
+def _about(kind: str, text: str, item: grammar.Item | None) -> str:
+    """Что видит ИИ: сообщение и, для задания, предложение с разбором ключа."""
+    about = f"Вид: {FEEDBACK_TITLES[kind]}\nСообщение: {text}"
+    if item is None:
+        return about
+    task = grammar.content().exercises[item.exercise]
+    return (f"{about}\nЗадание: {task}\nПредложение: {grammar.plain(item.text)}\n"
+            f"Перевод: {item.ru}\nРазбор ответа из ключа: {item.why}")
+
+
+async def _offer_reply(request: Request, feedback_id: int, about: str, sent: dict[int, int]) -> None:
+    """Черновик ответа ответом на сообщение админу, с кнопками решения."""
+    try:
+        draft = await enrich.feedback_reply(settings(), about)
+    except enrich.EnrichError:
+        draft = None
+    if draft:
+        async with request.app.state.pool.acquire() as conn:
+            await repo.set_feedback_draft(conn, feedback_id, draft)
+        text = f"✍️ Черновик ответа:\n\n{draft}"
+        buttons = [{"text": "✅ Отправить", "callback_data": f"fb:send:{feedback_id}"},
+                   {"text": "✏️ Изменить", "callback_data": f"fb:edit:{feedback_id}"}]
+    else:
+        text = "ИИ не написал черновик — ответь сам."
+        buttons = [{"text": "✏️ Ответить", "callback_data": f"fb:edit:{feedback_id}"}]
+    buttons.append({"text": "🚫 Без ответа", "callback_data": f"fb:skip:{feedback_id}"})
+    for chat_id, message_id in sent.items():
+        answer = (await request.app.state.telegram.post("/sendMessage", json={
+            "chat_id": chat_id, "text": text, "reply_parameters": {"message_id": message_id},
+            "reply_markup": {"inline_keyboard": [buttons]},
+        })).json()
+        if not answer.get("ok"):
+            log.warning("черновик #%s не дошёл до админа %s: %s", feedback_id, chat_id, answer.get("description"))
+
+
+@router.post("/admin/feedback/{feedback_id}/answer", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(admin_user)])
+async def answer_feedback(feedback_id: int, body: schemas.FeedbackAnswer, request: Request) -> None:
+    """Ответ автору от бота: свой текст админа или черновик ИИ как есть."""
+    async with request.app.state.pool.acquire() as conn:
+        row = await repo.open_feedback(conn, feedback_id)
+        if row is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "уже закрыто")
+        answer = (body.text or "").strip() or row["draft"]
+        if not answer:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "черновика нет — напиши ответ сам")
+        quote = row["text"] if len(row["text"]) <= 300 else row["text"][:300] + "…"
+        result = (await request.app.state.telegram.post("/sendMessage", json={
+            "chat_id": row["tg_id"], "parse_mode": "HTML",
+            "text": f"💬 Ответ на твоё сообщение\n<blockquote>{escape(quote)}</blockquote>\n{escape(answer)}",
+        })).json()
+        if not result.get("ok"):
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Telegram не доставил: {result.get('description')}")
+        await repo.close_feedback(conn, feedback_id, "answered", answer)
+
+
+@router.post("/admin/feedback/{feedback_id}/skip", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(admin_user)])
+async def skip_feedback(feedback_id: int, request: Request) -> None:
+    async with request.app.state.pool.acquire() as conn:
+        if await repo.open_feedback(conn, feedback_id) is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "уже закрыто")
+        await repo.close_feedback(conn, feedback_id, "skipped", None)
 
 
 @router.post("/client-errors", status_code=status.HTTP_204_NO_CONTENT)
@@ -435,6 +512,35 @@ async def internal_digest(request: Request) -> list[schemas.Digest]:
                 teachers=[teacher["tg_id"]],
             ))
     return digests
+
+
+@router.get("/internal/word-of-day", response_model=list[schemas.WordOfDay],
+            dependencies=[Depends(service_only)])
+async def internal_word_of_day(request: Request) -> list[schemas.WordOfDay]:
+    """Слово дня тем, у кого сейчас его час: из случайного решённого задания
+    тетради — слово, которого у человека ещё нет в карточках."""
+    cfg = settings()
+    items = grammar.content().items
+    out = []
+    async with request.app.state.pool.acquire() as conn:
+        rows = await repo.word_of_day_users(conn, cfg.tz)
+        for row, _ in at_local_hours(rows, [cfg.word_hour], datetime.now(UTC)):
+            done = [items[k] for k in row["items"] if k in items]
+            # Несколько попыток: в коротком предложении подходящего слова может не быть.
+            for item in random.sample(done, min(5, len(done))):
+                word = await repo.word_to_learn(conn, row["user_id"], re.findall(r"[a-z]+", item.en.lower()))
+                if word:
+                    out.append(schemas.WordOfDay(tg_id=row["tg_id"], lemma=word["lemma"], ipa=word["ipa"],
+                                                 translation=word["translation"], exercise=item.exercise,
+                                                 en=item.en, ru=item.ru))
+                    break
+    return out
+
+
+@router.post("/me/word-of-day/off", status_code=status.HTTP_204_NO_CONTENT)
+async def word_of_day_off(request: Request, who: Identity = Depends(identity)) -> None:
+    async with request.app.state.pool.acquire() as conn:
+        await repo.stop_word_of_day(conn, who.tg_id)
 
 
 @router.get(

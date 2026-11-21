@@ -513,6 +513,32 @@ async def reminder_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Re
     )
 
 
+async def word_of_day_users(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
+    """Кому слово дня: решал тетрадь и не выключил рассылку. items — решённые задания."""
+    return await conn.fetch(
+        "select u.id as user_id, u.tg_id, coalesce(u.tz, $1) as tz, array_agg(r.item) as items"
+        " from users u join grammar_results r on r.user_id = u.id"
+        " where u.word_of_day group by u.id",
+        tz,
+    )
+
+
+async def word_to_learn(conn: asyncpg.Connection, user_id: int, lemmas: list[str]) -> asyncpg.Record | None:
+    """Самое редкое из слов предложения, которого у человека ещё нет. Частые
+    (the, is) и совсем редкие (имена, мусор) не подходят."""
+    return await conn.fetchrow(
+        "select w.id, w.lemma, w.translation, w.ipa from words w"
+        " where w.lemma = any($2) and not w.banned and w.zipf between 2.5 and 5.5"
+        "  and not exists (select 1 from cards c where c.user_id = $1 and c.word_id = w.id)"
+        " order by w.zipf limit 1",
+        user_id, lemmas,
+    )
+
+
+async def stop_word_of_day(conn: asyncpg.Connection, tg_id: int) -> None:
+    await conn.execute("update users set word_of_day = false where tg_id = $1", tg_id)
+
+
 async def warmup_targets(conn: asyncpg.Connection, tz: str) -> list[asyncpg.Record]:
     """У кого есть слова, которые пора повторить, — им разминка в чате."""
     return await conn.fetch(
@@ -654,6 +680,37 @@ async def report(
         comment,
     )
     return True
+
+
+async def add_feedback(
+    conn: asyncpg.Connection, user_id: int, kind: str, text: str, item: str | None
+) -> int:
+    return await conn.fetchval(
+        "insert into feedback (user_id, kind, text, item) values ($1, $2, $3, $4) returning id",
+        user_id, kind, text, item,
+    )
+
+
+async def set_feedback_draft(conn: asyncpg.Connection, feedback_id: int, draft: str) -> None:
+    await conn.execute("update feedback set draft = $2 where id = $1", feedback_id, draft)
+
+
+async def open_feedback(conn: asyncpg.Connection, feedback_id: int) -> asyncpg.Record | None:
+    """Неотвеченное сообщение с адресатом ответа. None — нет такого или уже закрыто."""
+    return await conn.fetchrow(
+        "select f.text, f.draft, u.tg_id from feedback f join users u on u.id = f.user_id"
+        " where f.id = $1 and f.status = 'new'",
+        feedback_id,
+    )
+
+
+async def close_feedback(
+    conn: asyncpg.Connection, feedback_id: int, status: str, answer: str | None
+) -> None:
+    await conn.execute(
+        "update feedback set status = $2, answer = $3, closed_at = now() where id = $1",
+        feedback_id, status, answer,
+    )
 
 
 async def open_reports(conn: asyncpg.Connection) -> list[asyncpg.Record]:

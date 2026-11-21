@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # подгоняет под расписание уроков.
     digest_days: str = "mon"
     digest_hour: int = Field(default=8, ge=0, le=23)
+    # Слово дня из тетради — днём, между утренним и вечерним напоминанием.
+    word_hour: int = Field(default=13, ge=0, le=23)
 
     log_level: str = "INFO"
     queue_limit: int = Field(default=50, ge=1, le=200)

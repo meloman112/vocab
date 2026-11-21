@@ -213,6 +213,17 @@ class ReminderTarget(BaseModel):
     evening: bool
 
 
+class WordOfDay(BaseModel):
+    tg_id: int
+    lemma: str
+    ipa: str
+    translation: str
+    exercise: int
+    # Предложение из решённого задания с ответом и его перевод.
+    en: str
+    ru: str
+
+
 class DigestStudent(BaseModel):
     name: str
     done: int
@@ -321,6 +332,11 @@ class Feedback(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     # Задание тетради, о котором речь: «12-3».
     item: str | None = None
+
+
+class FeedbackAnswer(BaseModel):
+    # Пусто — уходит черновик ИИ как есть.
+    text: str | None = Field(default=None, max_length=3000)
 
 
 class ClientError(BaseModel):

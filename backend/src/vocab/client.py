@@ -167,3 +167,15 @@ class VocabAPI:
 
     async def test_summaries(self) -> list[dict[str, Any]]:
         return await self._call("POST", "/internal/tests/summaries")
+
+    async def word_of_day(self) -> list[dict[str, Any]]:
+        return await self._call("GET", "/internal/word-of-day")
+
+    async def stop_word_of_day(self, tg_id: int) -> None:
+        await self._call("POST", "/me/word-of-day/off", tg_id)
+
+    async def answer_feedback(self, tg_id: int, feedback_id: int, text: str | None = None) -> None:
+        await self._call("POST", f"/admin/feedback/{feedback_id}/answer", tg_id, json={"text": text})
+
+    async def skip_feedback(self, tg_id: int, feedback_id: int) -> None:
+        await self._call("POST", f"/admin/feedback/{feedback_id}/skip", tg_id)

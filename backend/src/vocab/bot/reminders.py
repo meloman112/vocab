@@ -2,11 +2,13 @@
 и умеет отправлять сообщения, а отдельный шедулер-сервис пришлось бы учить
 работать с Telegram заново."""
 
+import html
 import logging
+import re
 from typing import Any
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -125,6 +127,30 @@ async def send_digest(bot: Bot, api: VocabAPI, cfg: Settings) -> None:
                 log.warning("не отправил сводку %s: %s", tg_id, exc)
 
 
+def word_of_day_text(w: dict[str, Any]) -> str:
+    """Слово жирным и в самом предложении: видно, где оно встретилось."""
+    sentence = re.sub(rf"\b({re.escape(w['lemma'])})\b", r"<b>\1</b>", html.escape(w["en"]), flags=re.I)
+    ipa = f" [{html.escape(w['ipa'])}]" if w["ipa"] else ""
+    return (f"📖 Слово дня: <b>{html.escape(w['lemma'])}</b>{ipa} — {html.escape(w['translation'])}\n\n"
+            f"Из твоей тетради, упражнение {w['exercise']}:\n<i>{sentence}</i>\n{html.escape(w['ru'])}")
+
+
+def word_of_day_keyboard(lemma: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="➕ В мои слова", callback_data=f"add:{lemma}"),
+        InlineKeyboardButton(text="🔕 Не присылать", callback_data="wod:off"),
+    ]])
+
+
+async def send_word_of_day(bot: Bot, api: VocabAPI) -> None:
+    for w in await api.word_of_day():
+        try:
+            await bot.send_message(w["tg_id"], word_of_day_text(w), parse_mode="HTML",
+                                   reply_markup=word_of_day_keyboard(w["lemma"]))
+        except Exception as exc:  # noqa: BLE001 — как в notify: остальным слово дойти должно
+            log.warning("не отправил слово дня %s: %s", w["tg_id"], exc)
+
+
 async def keep_warm(bot: Bot, widgets: Widgets) -> None:
     """Пинг Telegram, чтобы соединения не простаивали: Telegram держит
     простаивающее соединение 3–7 минут, а новое с test_moe — до 3 с,
@@ -148,6 +174,8 @@ def start_scheduler(bot: Bot, api: VocabAPI, cfg: Settings, widgets: Widgets) ->
                       args=(bot, api, cfg), id="remind-tests", misfire_grace_time=300)
     scheduler.add_job(send_digest, CronTrigger(day_of_week=cfg.digest_days, hour=cfg.digest_hour, minute=0),
                       args=(bot, api, cfg), id="digest", misfire_grace_time=300)
+    scheduler.add_job(send_word_of_day, CronTrigger(minute=0), args=(bot, api),
+                      id="word-of-day", misfire_grace_time=300)
     scheduler.add_job(post_summaries, IntervalTrigger(seconds=30), args=(bot, api), id="exam-summaries")
     scheduler.add_job(keep_warm, IntervalTrigger(minutes=3), args=(bot, widgets), id="keep-warm")
     scheduler.start()
