@@ -1,5 +1,5 @@
 import { api } from '../../api/client';
-import type { ExerciseData, GrammarContent, PdfExercise, PdfPart, Rule, TopicData } from '../../api/types';
+import type { ExerciseData, GrammarContent, Note, PdfExercise, PdfPart, Rule, TopicData } from '../../api/types';
 import { bracketLabel, isSlot, parseItem, type Part, type Slot } from './engine';
 
 /**
@@ -12,6 +12,7 @@ export interface Item {
   /** Номер задания в книге, с единицы. */
   n: number;
   text: string;
+  note?: Note;
 }
 
 export interface Exercise extends Omit<ExerciseData, 'items'> {
@@ -31,7 +32,7 @@ function build(content: GrammarContent): Book {
   const items = new Map<string, Item>();
   for (const topic of content.topics) {
     for (const ex of topic.exercises) {
-      const list = ex.items.map((text, i) => ({ key: `${ex.id}-${i}`, ex: ex.id, n: i + 1, text }));
+      const list = ex.items.map((text, i) => ({ key: `${ex.id}-${i}`, ex: ex.id, n: i + 1, text, note: ex.notes?.[i] }));
       exercises.set(ex.id, { ...ex, topic: topic.id, items: list });
       for (const item of list) items.set(item.key, item);
     }

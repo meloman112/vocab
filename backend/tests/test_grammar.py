@@ -3,6 +3,8 @@
 Ключи ответов проверяет scripts/grammar-keys.ts в мини-аппе — там движок.
 """
 
+import json
+
 from vocab import grammar
 
 
@@ -29,3 +31,12 @@ def test_plain_shows_book_brackets():
         "I (to take) my brother. You (to study) now?"
     )
     assert grammar.plain("The woman {||=who|that} helped me.") == "The woman ___ helped me."
+
+
+def test_every_item_has_a_note():
+    """Перевод и разбор идут параллельно items: сдвиг показал бы чужой перевод."""
+    data = json.loads(grammar.content().raw)
+    for topic in data["topics"]:
+        for ex in topic["exercises"]:
+            assert len(ex["notes"]) == len(ex["items"]), ex["id"]
+            assert all(n["ru"] and n["why"] for n in ex["notes"]), ex["id"]

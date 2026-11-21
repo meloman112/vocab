@@ -11,6 +11,8 @@ const SETTLE_MS = 300;
 const SLOW_MS = 2500;
 /** Длиннее — уже абзац: модель переведёт, но читать такое в окошке неудобно. */
 const MAX_CHARS = 400;
+/** Клик через столько после касания — от пальца, а не от мыши. */
+const TAP_MS = 800;
 
 type Pill = { text: string; x: number; y: number; below: boolean };
 type Card =
@@ -154,7 +156,9 @@ export function SelectionTranslate() {
     // контекстное меню, и contextmenu до страницы доходит не всегда.
     // contextmenu остаётся запасным путём и гасит меню браузера.
     let rightAt = 0;
+    let touchAt = 0;
     const onPointer = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') touchAt = Date.now();
       if (e.button !== 2) return;
       const text = targetAt(e.clientX, e.clientY);
       if (!text) return;
@@ -172,17 +176,30 @@ export function SelectionTranslate() {
       e.preventDefault();
       open(text);
     };
+    // Телефон: долгое касание в WebView Telegram выделяет слово не всегда, и
+    // в тексте упражнений (.tr-tap) слово переводится простым касанием.
+    // Мышью — нет: щелчок в предложение ставит курсор, а не открывает окно.
+    const onClick = (e: MouseEvent) => {
+      if (Date.now() - touchAt > TAP_MS) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target?.closest('.tr-tap') || target.closest('button, a')) return;
+      if (window.getSelection()?.isCollapsed === false) return;
+      const word = wordAt(e.clientX, e.clientY);
+      if (word) open(word);
+    };
     // Прокрутили — кнопка осталась бы висеть в стороне от слова.
     const onScroll = () => setPill(null);
     document.addEventListener('selectionchange', onChange);
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('contextmenu', onContext);
+    document.addEventListener('click', onClick);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       clearTimeout(timer);
       document.removeEventListener('selectionchange', onChange);
       document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('contextmenu', onContext);
+      document.removeEventListener('click', onClick);
       window.removeEventListener('scroll', onScroll);
     };
   }, [open]);

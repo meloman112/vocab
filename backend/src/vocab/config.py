@@ -59,9 +59,12 @@ class Settings(BaseSettings):
         # зашита: http сюда попадёт разве что опечаткой в DOMAIN.
         return f"https://{self.domain}/app/"
 
+    @property
+    def admins(self) -> set[int]:
+        return {self.owner_tg_id} | {int(a) for a in self.admin_tg_ids.split(",") if a.strip()}
+
     def is_admin(self, tg_id: int) -> bool:
-        admins = {int(a) for a in self.admin_tg_ids.split(",") if a.strip()}
-        return tg_id == self.owner_tg_id or tg_id in admins
+        return tg_id in self.admins
 
     @property
     def reminder_hour_list(self) -> list[int]:

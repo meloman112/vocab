@@ -136,6 +136,8 @@ export const REPORT_REASONS: Record<ReportReason, string> = {
   other: 'Другое',
 };
 
+export type FeedbackKind = 'review' | 'idea' | 'bug' | 'exercise';
+
 export interface Me {
   is_admin: boolean;
   is_teacher: boolean;
@@ -164,6 +166,13 @@ export interface ExerciseData {
   choices?: string[];
   /** Запятые проверяются (non-defining clauses). */
   commas?: boolean;
+  /** Перевод и разбор по заданиям, в порядке items: показываются после верного ответа. */
+  notes?: Note[];
+}
+
+export interface Note {
+  ru: string;
+  why: string;
 }
 
 export interface TopicData {

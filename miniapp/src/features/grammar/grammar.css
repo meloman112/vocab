@@ -503,6 +503,29 @@
   background: var(--g-red-soft);
 }
 
+/* Почему верно и перевод: обычным текстом под зелёным «Верно ✓». */
+.g-note {
+  display: grid;
+  gap: 6px;
+  font-weight: 400;
+  color: var(--g-ink);
+}
+
+.g-note__ru {
+  color: var(--g-muted);
+  font-style: italic;
+}
+
+.g-report {
+  align-self: center;
+  font-size: 13px;
+  color: var(--g-muted);
+}
+
+.g-sheet .fb-form {
+  padding: 0;
+}
+
 .g-why {
   font-weight: 600;
   color: var(--g-red);

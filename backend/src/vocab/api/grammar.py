@@ -33,13 +33,16 @@ def _known(item: str) -> grammar.Item:
 async def get_content(
     _: Identity = Depends(identity),
     if_none_match: str | None = Header(default=None),
+    accept_encoding: str = Header(default=""),
 ) -> Response:
     """Задания отдаются только из Telegram: это книга учителя, в статику она не кладётся."""
     content = grammar.content()
-    headers = {"ETag": content.etag, "Cache-Control": "private, no-cache"}
+    headers = {"ETag": content.etag, "Cache-Control": "private, no-cache", "Vary": "Accept-Encoding"}
     if if_none_match == content.etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
-    return Response(content.raw, media_type="application/json", headers=headers)
+    if "gzip" not in accept_encoding:
+        return Response(content.raw, media_type="application/json", headers=headers)
+    return Response(content.gzipped, media_type="application/json", headers={**headers, "Content-Encoding": "gzip"})
 
 
 @router.get("/grammar/progress", response_model=schemas.GrammarProgress)

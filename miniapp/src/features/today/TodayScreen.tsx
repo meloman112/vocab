@@ -1,6 +1,5 @@
 import { Badge, Button, Caption, Cell, List, Section, Text, Title } from '@telegram-apps/telegram-ui';
 
-import { Authors } from '../../lib/about';
 import { deadline } from '../tests/TestsScreen';
 import type { Summary } from './useSummary';
 
@@ -12,10 +11,11 @@ interface Props {
   onGrammar: () => void;
   onLeaderboard: () => void;
   onAdmin: () => void;
+  onAbout: () => void;
 }
 
 /** «Что делать сейчас»: одна кнопка на самое срочное и короткий список остального. */
-export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLeaderboard, onAdmin }: Props) {
+export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLeaderboard, onAdmin, onAbout }: Props) {
   const { stats, me, tests, board, reports, error } = summary;
   const todo = tests?.filter((t) => !t.submitted_at && !t.closed) ?? [];
   const test = todo[0];
@@ -75,7 +75,7 @@ export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLe
           </Section>
         )}
 
-        <Section footer={<Section.Footer className="authors"><Authors /></Section.Footer>}>
+        <Section>
           <Cell before={<Icon>🏆</Icon>} onClick={onLeaderboard}>
             Рейтинг недели
           </Cell>
@@ -88,6 +88,9 @@ export function TodayScreen({ summary, onTest, onClass, onCards, onGrammar, onLe
               Админка
             </Cell>
           )}
+          <Cell before={<Icon>💬</Icon>} subtitle="Автор материалов, отзыв, идея" onClick={onAbout}>
+            О приложении
+          </Cell>
         </Section>
       </List>
     </div>

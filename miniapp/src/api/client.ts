@@ -5,6 +5,7 @@ import type {
   Card,
   CommonMistake,
   DrillVerb,
+  FeedbackKind,
   GrammarAttempt,
   RecheckOut,
   GrammarContent,
@@ -89,6 +90,10 @@ export const api = {
 
   report: (wordId: number, reason: ReportReason) =>
     send<void>('POST', '/reports', { word_id: wordId, reason }),
+
+  /** Отзыв, идея или ошибка — админам в Telegram. */
+  feedback: (kind: FeedbackKind, text: string, item?: string) =>
+    send<void>('POST', '/feedback', { kind, text, item }),
 
   me: () => request<Me>('/me'),
 

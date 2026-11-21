@@ -313,6 +313,16 @@ class Report(BaseModel):
     comment: str | None = Field(default=None, max_length=500)
 
 
+FeedbackKind = Literal["review", "idea", "bug", "exercise"]
+
+
+class Feedback(BaseModel):
+    kind: FeedbackKind
+    text: str = Field(min_length=1, max_length=2000)
+    # Задание тетради, о котором речь: «12-3».
+    item: str | None = None
+
+
 class ClientError(BaseModel):
     message: str = Field(max_length=500)
     stack: str = Field(default="", max_length=4000)

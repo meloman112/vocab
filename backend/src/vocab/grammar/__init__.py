@@ -5,6 +5,7 @@
 существуют и сколько в них пропусков, — чтобы не принимать мусор.
 """
 
+import gzip
 import hashlib
 import json
 import re
@@ -29,6 +30,8 @@ class Item:
 @dataclass(frozen=True)
 class Content:
     raw: bytes
+    # Тетрадь с переводами весит ~800 КБ, сжатая — в разы меньше; жмём один раз.
+    gzipped: bytes
     etag: str
     items: dict[str, Item]
     exercises: dict[int, str]
@@ -51,7 +54,7 @@ def content() -> Content:
     # Отдаём одними и теми же байтами: ETag избавляет телефон от повторной
     # загрузки ~400 КБ при каждом открытии тетради.
     etag = '"' + hashlib.sha256(raw).hexdigest()[:16] + '"'
-    return Content(raw, etag, items, exercises)
+    return Content(raw, gzip.compress(raw), etag, items, exercises)
 
 
 def plain(text: str) -> str:

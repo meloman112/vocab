@@ -3,12 +3,13 @@
 import logging
 import random
 from datetime import UTC, datetime
+from html import escape
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from .. import dictionary, enrich, lexicon, quiz, repo, srs
+from .. import dictionary, enrich, grammar, lexicon, quiz, repo, srs
 from ..config import settings
 from . import schemas
 from .auth import Identity, admin_user, current_user, identity, service_only
@@ -216,6 +217,37 @@ async def post_report(
     async with request.app.state.pool.acquire() as conn:
         if not await repo.report(conn, user_id, body.word_id, body.reason, comment):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "такого слова в словаре нет")
+
+
+FEEDBACK_TITLES = {"review": "💬 Отзыв", "idea": "💡 Предложение", "bug": "🐞 Ошибка в приложении",
+                   "exercise": "📒 Ошибка в задании"}
+
+
+@router.post("/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def post_feedback(
+    body: schemas.Feedback, request: Request, who: Identity = Depends(identity)
+) -> None:
+    """Отзыв, идея или ошибка — админам в личку от бота: в базе их не
+    разбирать, а ответить автору можно сразу, по ссылке на него."""
+    author = escape(who.name or str(who.tg_id))
+    lines = [f'{FEEDBACK_TITLES[body.kind]} от <a href="tg://user?id={who.tg_id}">{author}</a>']
+    if body.item:
+        item = grammar.content().items.get(body.item)
+        if item is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"задания {body.item} нет в тетради")
+        lines.append(f"Упражнение {item.exercise}, № {item.n}: <i>{escape(grammar.plain(item.text))}</i>")
+    lines.append(escape(body.text.strip()))
+    delivered = 0
+    for chat_id in settings().admins:
+        answer = (await request.app.state.telegram.post(
+            "/sendMessage", json={"chat_id": chat_id, "text": "\n\n".join(lines), "parse_mode": "HTML"},
+        )).json()
+        if answer.get("ok"):
+            delivered += 1
+        else:
+            log.warning("отзыв не дошёл до админа %s: %s", chat_id, answer.get("description"))
+    if not delivered:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Не отправилось, попробуй ещё раз")
 
 
 @router.post("/client-errors", status_code=status.HTTP_204_NO_CONTENT)

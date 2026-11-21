@@ -1,6 +1,7 @@
 import { AppRoot, Tabbar } from '@telegram-apps/telegram-ui';
 import { useCallback, useEffect, useState } from 'react';
 
+import { AboutScreen } from './features/about/AboutScreen';
 import { AdminScreen } from './features/admin/AdminScreen';
 import { ClassScreen } from './features/class/ClassScreen';
 import { GrammarScreen } from './features/grammar/GrammarScreen';
@@ -30,7 +31,8 @@ type Flow =
   | { name: 'cards'; deck?: string }
   | { name: 'quiz'; mode: ModeId }
   | { name: 'test'; id: number }
-  | { name: 'admin' };
+  | { name: 'admin' }
+  | { name: 'about' };
 
 const startMode = MODES.find((m) => m.id === startScreen);
 
@@ -118,6 +120,7 @@ export function App() {
             onGrammar={() => setTab('grammar')}
             onLeaderboard={openBoard}
             onAdmin={() => setFlow({ name: 'admin' })}
+            onAbout={() => setFlow({ name: 'about' })}
           />
         );
       case 'grammar':
@@ -158,6 +161,8 @@ export function App() {
         return <TestsScreen openId={flow.id} onExit={closeFlow} />;
       case 'admin':
         return <AdminScreen onExit={closeFlow} />;
+      case 'about':
+        return <AboutScreen />;
     }
   }
 }

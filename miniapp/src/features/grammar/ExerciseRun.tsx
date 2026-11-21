@@ -2,10 +2,11 @@ import { Button } from '@telegram-apps/telegram-ui';
 import { Fragment, useEffect, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
 import { api } from '../../api/client';
-import type { GrammarMistakeIn } from '../../api/types';
+import type { GrammarMistakeIn, Note } from '../../api/types';
 import { celebrate } from '../../lib/celebrate';
 import { shuffle } from '../../lib/shuffle';
 import { impact, notify, useNoVerticalSwipes } from '../../lib/telegram';
+import { FeedbackForm } from '../about/FeedbackForm';
 import { capitalizeAt, partsOf, ruleFor, slotsOf } from './book';
 import { bracketLabel, diagnose, norm, type Diagnosis, type Slot } from './engine';
 import { RunSummary } from './RunSummary';
@@ -231,7 +232,8 @@ export function ExerciseRun(props: RunProps) {
       {/* key — задание: поля ввода неуправляемые и должны пересоздаваться. */}
       <section className="g-sheet" ref={sheetRef} key={`${key}-${mode}`}>
         <p className="g-task">{review ? `Упражнение ${ex.id}. ${ex.task}` : ex.task}</p>
-        <div className="g-sent">
+        {/* tr-tap: на телефоне слово переводится касанием — выделять долго. */}
+        <div className="g-sent tr-tap">
           <span className="g-num">{item.n}.</span>
           {parts.map((p, pi) => {
             if (typeof p === 'string') {
@@ -261,11 +263,12 @@ export function ExerciseRun(props: RunProps) {
           <Bank slot={slots[s.active]!} j={s.active} s={s} many={slots.length > 1} onPlace={place} />
         )}
 
-        <FeedbackView s={s} slots={slots} fresh={s.fresh} clean={progress.results[key]?.clean}
+        <FeedbackView s={s} slots={slots} fresh={s.fresh} clean={progress.results[key]?.clean} note={item.note}
           rule={ruleFor(book, ex, s.bad.find((b) => b.rule)?.rule, slots.find((x) => x.tense)?.tense)}
           onHint={(n) => { s.hints = n; rerender(); }}
           onRecheck={recheck}
           onShow={() => { for (const b of s.bad) s.shown[b.j] = true; s.hints = 3; rerender(); }} />
+        <ReportItem item={key} />
       </section>
 
       <div className="g-bottom">
@@ -419,17 +422,30 @@ interface FeedbackProps {
   fresh: boolean;
   clean: boolean | undefined;
   rule: ReturnType<typeof ruleFor>;
+  note: Note | undefined;
   onHint: (n: number) => void;
   onShow: () => void;
   onRecheck?: (b: Bad) => void;
 }
 
 /** Подсказки лесенкой: правило из Grammar book → формула → ответ красной ручкой. */
-function FeedbackView({ s, slots, fresh, clean, rule, onHint, onShow, onRecheck }: FeedbackProps) {
+function FeedbackView({ s, slots, fresh, clean, rule, note, onHint, onShow, onRecheck }: FeedbackProps) {
   if (s.done.every(Boolean)) {
-    if (!fresh) return <div className="g-fb ok">{clean ? 'Сделано с первого раза ✓' : 'Сделано, была ошибка'}</div>;
     const slipped = s.errors || s.shown.some(Boolean);
-    return <div className="g-fb ok">{slipped ? 'Верно ✓ Задание вернётся в работе над ошибками.' : 'Верно ✓'}</div>;
+    const verdict = !fresh
+      ? (clean ? 'Сделано с первого раза ✓' : 'Сделано, была ошибка')
+      : (slipped ? 'Верно ✓ Задание вернётся в работе над ошибками.' : 'Верно ✓');
+    return (
+      <div className="g-fb ok">
+        {verdict}
+        {note && (
+          <div className="g-note">
+            <div className="g-note__why">{note.why}</div>
+            <div className="g-note__ru">{note.ru}</div>
+          </div>
+        )}
+      </div>
+    );
   }
   if (!s.bad.length) return null;
   const onlyEmpty = s.bad.every((b) => b.why === 'Пусто.');
@@ -471,5 +487,16 @@ function FeedbackView({ s, slots, fresh, clean, rule, onHint, onShow, onRecheck 
         </>
       )}
     </div>
+  );
+}
+
+/** «Сообщить об ошибке» под заданием: письмо админам с самим предложением. */
+function ReportItem({ item }: { item: string }) {
+  const [open, setOpen] = useState(false);
+  if (open) return <FeedbackForm item={item} onClose={() => setOpen(false)} />;
+  return (
+    <button type="button" className="link g-report" onClick={() => setOpen(true)}>
+      ⚠️ Сообщить об ошибке в задании
+    </button>
   );
 }
