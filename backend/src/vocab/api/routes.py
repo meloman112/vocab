@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 
 from .. import dictionary, enrich, grammar, lexicon, quiz, repo, srs
-from ..config import settings
+from ..config import Settings, settings
 from . import schemas
 from .auth import Identity, admin_user, current_user, identity, service_only
 
@@ -529,12 +529,20 @@ async def internal_word_of_day(request: Request) -> list[schemas.WordOfDay]:
             # Несколько попыток: в коротком предложении подходящего слова может не быть.
             for item in random.sample(done, min(5, len(done))):
                 word = await repo.word_to_learn(conn, row["user_id"], re.findall(r"[a-z]+", item.en.lower()))
-                if word:
+                if word and await _sense_fits(cfg, word, item.en):
                     out.append(schemas.WordOfDay(tg_id=row["tg_id"], lemma=word["lemma"], ipa=word["ipa"],
                                                  translation=word["translation"], exercise=item.exercise,
                                                  en=item.en, ru=item.ru))
                     break
     return out
+
+
+async def _sense_fits(cfg: Settings, word, sentence: str) -> bool:
+    try:
+        return await enrich.sense_fits(cfg, word["lemma"], word["translation"], sentence)
+    except enrich.EnrichError:
+        # ИИ недоступен — слово дня лучше пропустить, чем учить не тому значению.
+        return False
 
 
 @router.post("/me/word-of-day/off", status_code=status.HTTP_204_NO_CONTENT)

@@ -48,6 +48,12 @@ PHRASES_PROMPT = """\
 Отвечай только JSON-объектом {"phrases": [...]}. Ничего не нашёл — пустой массив.
 """
 
+SENSE_PROMPT = """\
+Тебе пришлют английское слово, его перевод из словаря и предложение, где
+оно встретилось. Подходит ли этот перевод к значению слова именно в этом
+предложении? flat «плоский» в «We cleaned our flat» — нет (там «квартира»).
+Отвечай только JSON-объектом {"fits": true|false}.
+"""
 FEEDBACK_PROMPT = """\
 Ты помогаешь команде Vocab — бесплатного приложения в Telegram для изучения
 английского (тетрадь по грамматике и карточки слов) — отвечать пользователям.
@@ -345,6 +351,19 @@ def parse_reply(content: str) -> str:
 async def feedback_reply(cfg: Settings, about: str) -> str:
     """Черновик ответа на отзыв: его читает админ, прежде чем отправить."""
     return await _ask(cfg, FEEDBACK_PROMPT, about, parse_reply)
+
+
+def parse_fits(content: str) -> bool:
+    fits = json.loads(content).get("fits")
+    if not isinstance(fits, bool):
+        raise ValueError("в ответе модели нет fits")
+    return fits
+
+
+async def sense_fits(cfg: Settings, lemma: str, translation: str, sentence: str) -> bool:
+    """Перевод из словаря — в том ли значении, что в предложении: слово дня
+    не должно учить «плоский» на примере про квартиру."""
+    return await _ask(cfg, SENSE_PROMPT, f"Слово: {lemma}\nПеревод: {translation}\nПредложение: {sentence}", parse_fits)
 
 
 def parse_recheck(content: str) -> dict[str, Any]:
